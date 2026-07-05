@@ -28,16 +28,27 @@ FIELDS  = [
 class queryStructure():
     def __init__(self, structural_ID, fields=FIELDS, CIF_DIRS = "TEST_CIF", JSON_PATH = "TEST_QUERY"):
         """
-        Query exactly one structure from Materials Project
-        structural_ID: str
-        fields: list
+        Query structures from Materials Project based on its MPIDs
+        structural_ID   :   str or list(str)
+            MPIDs for a given structure, enter using argument parser
+        fields          :   list(str), optional
+            fields of the projected output for MP queries on each structure,
+            default is listed
+        CIF_DIRS        :   str, optional
+            directory path for cif files of the queried structure
+        JSON_PATH       :   str, optional
+            file path for the json files. 
         """
+
         self.IDs = structural_ID if isinstance(structural_ID, list) else [structural_ID]
         self.fields = fields
         self.cif_dirs = CIF_DIRS
-        self.json_path = os.path.join(JSON_PATH+".json")
+        self.json_path = JSON_PATH+".json"
 
     def query(self):
+        """
+        Main function for querying MPIDs
+        """
         with MPRester(mpAPI) as mpr:
             docs = mpr.materials.summary.search(
                 material_ids=self.IDs,
