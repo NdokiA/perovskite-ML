@@ -3,7 +3,7 @@ import json, os
 from pymatgen.core import Species 
 
 class checkOxidation():
-    def __init__(self, tolerance = 0.01, JSON_PATH = "TEST_QUERY"):
+    def __init__(self, tolerance = 0.01, TEST_JSON_PATH = "TEST_QUERY", OUTPUT_JSON_PATH = "OXIDATION_QUERY"):
         """
         Check whether MP entries satisfy charge neutrality with
         the given tolerance
@@ -14,12 +14,38 @@ class checkOxidation():
             file path for the json files. 
         """
         self.tolerance = tolerance 
-        self.json_path = JSON_PATH + ".json"
+        self.json_path = TEST_JSON_PATH + ".json"
+        self.output_json = OUTPUT_JSON_PATH + ".json"
     
-    def _load_json(self):
+    def load_json(self):
         with open(self.json_path, "r", encoding="utf-8") as f:
             return json.load(f)
     
+    def save_json(self, query, charge, assignment):
+        """
+        Save metadata to JSON
+        """
+        metadata = {"formula_pretty": query["formula_pretty"],
+                "material_id": query["material_id"],
+                "total_charge": charge,
+                "ion_assignment": assignment
+                }
+
+        if os.path.exists(self.output_json):
+            with open(self.output_json, "r") as f:
+                try:
+                    results = json.load(f)
+                    if not isinstance(results, list):
+                        results = [results]
+                except json.JSONDecodeError:
+                    results = []
+        else:
+            results = []
+        
+        results.append(metadata)
+        with open(self.output_json, "w") as f:
+            json.dump(results, f, indent=2)
+
     def _get_composition(self, doc):
         """
         Extract reduced composition
@@ -92,9 +118,12 @@ def write_log(log, filename = "oxidation.log"):
 
 if __name__ == "__main__":
     cO = checkOxidation()
-    queries = cO._load_json()
+    if os.path.exists("oxidation.log"):
+        os.remove("oxidation.log")
+    queries = cO.load_json()
     for query in queries:
         isNeutral, charge, assignment = cO.check_charge(query)
         log = f"Structure {query['formula_pretty']} ({query['material_id']}) -> Total Charge: {charge} with ion assignment {assignment}"
         write_log(log)
+        cO.save_json(query, charge, assignment)
         print(f"{query['material_id']} is logged")
