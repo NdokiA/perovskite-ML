@@ -5,14 +5,21 @@ from pymatgen.core import Species
 class checkOxidation():
     def __init__(self, tolerance = 0.01, TEST_JSON_PATH = "TEST_QUERY", OUTPUT_JSON_PATH = "OXIDATION_QUERY"):
         """
-        Check whether MP entries satisfy charge neutrality with
-        the given tolerance
-        tolerance   : float, optinal
-            Maximum absolute charge imbalance considered neutral
-            Default is 0.01
-        JSON_PATH       :   str, optional
-            file path for the json files. 
+        Checks whether a material's composition can satisfy charge
+        neutrality, by trying combinations of oxidation states pulled
+        from Materials Project's `possible_species` field.
+
+        tolerance : float, optional
+            How far off zero total charge is still counted as "neutral".
+            Default 0.01.
+
+        TEST_JSON_PATH : str, optional
+            Filename (without ".json") of the input query file to read from.
+
+        OUTPUT_JSON_PATH : str, optional
+            Filename (without ".json") to write oxidation-state results to.
         """
+
         self.tolerance = tolerance 
         self.json_path = TEST_JSON_PATH + ".json"
         self.output_json = OUTPUT_JSON_PATH + ".json"
@@ -56,6 +63,11 @@ class checkOxidation():
         }
     
     def _get_oxidation_states(self, doc):
+        """
+        Reads doc["possible_species"] (e.g. ["Ca2+", "Ti4+", "O2-"]) and
+        groups the oxidation states by element.
+        """
+
         candidates = {}
         for species in doc.get("possible_species", []):
             sp = Species.from_str(species)
@@ -66,7 +78,9 @@ class checkOxidation():
 
     def _evaluate_combination(self, composition, elements, oxidation_states):
         """
-        Compute total charge for one oxidation-state assignment
+        Adds up total charge for one specific choice of oxidation state
+        per element: sum(oxidation_state * how_many_atoms) across all
+        elements.
         """
         return round(sum(ox*composition[element]
                 for element, ox in zip(elements, oxidation_states))
@@ -74,8 +88,14 @@ class checkOxidation():
     
     def _find_best_assigment(self, composition, candidates):
         """
-        Use self._evaluate_combination to search every oxidation-state
+        Tries every combination of oxidation states (one per element, all
+        combos from `candidates`) and looks for one that adds up to ~0
+        total charge. 
         """
+
+
+
+
         elements = list(composition.keys())
         option_lists = [sorted(candidates[e]) for e in elements]
 
@@ -94,9 +114,27 @@ class checkOxidation():
             if abs(charge) <= self.tolerance:
                 return True, charge, assignment
 
-            return False, best_charge, best_assignment
+        return False, best_charge, best_assignment
 
     def check_charge(self, doc):
+        """
+        Main entry point: given one Materials Project doc, checks if it
+        can be assigned oxidation states that balance to zero charge.
+
+        Returns (is_neutral, charge, assignment):
+          - is_neutral: True if a neutral (or near-neutral, within
+            tolerance) assignment was found.
+
+          - charge: the total charge for the best assignment found.
+
+          - assignment: dict of {element: oxidation_state} for that
+            assignment.
+
+        Returns (False, None, None) if there's no possible_species data,
+        or if some element in the composition has no candidate oxidation
+        state to try at all.
+        """
+
         if not doc.get("possible_species"):
             return False, None, None
         composition = self._get_composition(doc)
@@ -120,6 +158,7 @@ if __name__ == "__main__":
     cO = checkOxidation()
     if os.path.exists("oxidation.log"):
         os.remove("oxidation.log")
+        os.remove("OXIDATION_QUERY.json")
     queries = cO.load_json()
     for query in queries:
         isNeutral, charge, assignment = cO.check_charge(query)
