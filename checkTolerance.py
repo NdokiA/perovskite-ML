@@ -132,7 +132,14 @@ class checkTolerance():
         oxi_map = self._get_oxi_map(doc)
         a_elements, b_elements, x_elements = self._get_ion_assignments(doc)
         if a_elements is None:
-            return None
+            return {
+            "material_id": doc.get("material_id"),
+            "a_elements": None, "b_elements": b_elements, "x_elements": x_elements,
+            "r_A": None, "r_B": None, "r_X": None, "n_A": None,
+            "octahedral_factor": None,
+            "goldschmidt_t": None,
+            "bartel_tau": None,
+        }
  
         r_A = self._avg_radius(a_elements, oxi_map, 12)
         r_B = self._avg_radius(b_elements, oxi_map, 6)
