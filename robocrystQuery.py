@@ -14,7 +14,7 @@ def check_duplicate(unique_docs, doc):
     Returns deduplicated list, keeping the first occurrence of each unique structure.
     """
     matcher = StructureMatcher()
-    return any(matcher.fit(doc.structure, kept.structure) for kept in unique_docs)
+    return any(matcher.fit(doc['structure'], ['kept.structure']) for kept in unique_docs)
 
 FIELDS  = [
     # Identifiers
@@ -144,8 +144,7 @@ class queryPerovskite(qS):
 
         with MPRester(mpAPI) as mpr:
             robocrys_docs = mpr.materials.robocrys.search(
-                keywords=["perovskite"],
-                chunk_size=1, num_chunks=1,  # set None for production, 1 for testing
+                keywords=["perovskite"] # set None for production, 1 for testing
             )
             robo_ids = {d.material_id for d in robocrys_docs}
         
@@ -156,8 +155,7 @@ class queryPerovskite(qS):
         self._log("Starting provenance tags/remarks search for 'perovskite'")
         with MPRester(mpAPI, use_document_model=False) as mpr2:
             prov_docs = mpr2.materials.provenance.search(
-                fields=["material_id", "remarks", "tags"],
-                chunk_size=1, num_chunks=1,  # set None for production, 1 for testing
+                fields=["material_id", "remarks", "tags"] # set None for production, 1 for testing
             )
 
         prov_ids = {
@@ -184,6 +182,7 @@ class queryPerovskite(qS):
         """
         self._log(f"Starting verification pipeline for {len(mpids)} MPIDs")
         docs = []
+
         for id in mpids:
             self._log(f"Querying structure for {id}")
             try:
@@ -192,28 +191,49 @@ class queryPerovskite(qS):
                 self._log(f"ERROR querying {id}: {e}")
                 continue
 
-            if check_duplicate(docs, doc):
-                self._log(f"Skipping {id}: duplicate structure of an already-processed candidate")
-                continue
+            try:
+                if check_duplicate(docs, doc):
+                    self._log(f"Skipping {id}: duplicate structure of an already-processed candidate")
+                    continue
+            except Exception as e:
+                self._log(f"ERROR checking duplicate for {id}: {e}")
+                # If duplicate check itself fails, err on the side of continuing to process it
             docs.append(doc)
 
-            self.save_cif(doc)
-            self.save_json(doc)
+            try:
+                self.save_cif(doc)
+            except Exception as e:
+                self._log(f"ERROR saving CIF for {id}: {e}")
+
+            try:
+                self.save_json(doc)
+            except Exception as e:
+                self._log(f"ERROR saving JSON for {id}: {e}")
 
             self._log(f"Running oxidation-state check for {id}")
-            results_cO = self.cO.check_charge(doc)
-            self.cO.save_json(results_cO)
+            try:
+                results_cO = self.cO.check_charge(doc)
+                self.cO.save_json(results_cO)
+            except Exception as e:
+                self._log(f"ERROR in oxidation-state check for {id}: {e}")
 
             self._log(f"Running CrystalNN BX6 verification for {id}")
-            results_cN = self.cN.verify_bx6(doc)
-            self.cN.save_json(results_cN)
+            try:
+                results_cN = self.cN.verify_bx6(doc)
+                self.cN.save_json(results_cN)
+            except Exception as e:
+                self._log(f"ERROR in CrystalNN BX6 verification for {id}: {e}")
 
             self._log(f"Computing tolerance factors for {id}")
-            results_cT = self.cT.get_tolerance_factors(doc)
-            self.cT.save_json(results_cT)
+            try:
+                results_cT = self.cT.get_tolerance_factors(doc)
+                self.cT.save_json(results_cT)
+            except Exception as e:
+                self._log(f"ERROR computing tolerance factors for {id}: {e}")
 
-            self._log(f"Completed verification pipeline for {id}")
+        self._log(f"Completed verification pipeline for {id}")
         self._log(f"Finished verification pipeline for all {len(mpids)} MPIDs")
+        self._log(f"Total unique structure: {len(docs)}")
 
 if __name__ == "__main__":
     query = queryPerovskite()

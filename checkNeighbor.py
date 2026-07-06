@@ -293,7 +293,7 @@ class checkNeighbor():
         return has_net, b_sites, corner_frac
 
     
-    def verify_bx6(self, doc, x_elements = None, b_elements = None, cn_target=6, cn_tol=0,
+    def verify_bx6(self, doc, x_elements = None, b_elements = None, cn_target=6, cn_tol=1,
                    require_corner = True):
         """
 

@@ -129,13 +129,12 @@ class checkOxidation():
 
         if not doc.get("possible_species"):
             isNeutral, charge, assignment = False, None, None
-        composition = self._get_composition(doc)
-        candidates = self._get_oxidation_states(doc)
-
-        if not all(element in candidates for element in composition):
+        elif not all(element in self._get_oxidation_states(doc) for element in self._get_composition(doc)):
             isNeutral, charge, assignment = False, None, None
-        
-        isNeutral, charge, assignment = self._find_best_assigment(composition, candidates)
+        else:
+            composition = self._get_composition(doc)
+            candidates = self._get_oxidation_states(doc)        
+            isNeutral, charge, assignment = self._find_best_assigment(composition, candidates)
 
         return  {"formula_pretty": doc["formula_pretty"],
                 "material_id": doc["material_id"],
