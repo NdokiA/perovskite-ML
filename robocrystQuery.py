@@ -1,20 +1,12 @@
-import os, logging, re
+import os, logging, json, time
 from config import mpAPI
 from mp_api.client import MPRester
-from queryTest import queryStructure as qS
+from queryStructure import queryStructure as qS
 from checkNeighbor import checkNeighbor as cN
 from checkOxidation import checkOxidation as cO 
 from checkTolerance import checkTolerance as cT
 from pathlib import Path
 from pymatgen.analysis.structure_matcher import StructureMatcher
-
-def check_duplicate(unique_docs, doc):
-    """
-    docs: list of MP summary docs (must include `structure` field)
-    Returns deduplicated list, keeping the first occurrence of each unique structure.
-    """
-    matcher = StructureMatcher()
-    return any(matcher.fit(doc['structure'], ['kept.structure']) for kept in unique_docs)
 
 FIELDS  = [
     # Identifiers
@@ -87,6 +79,7 @@ class queryPerovskite(qS):
         self.log_path = LOG_PATH
         self._setup_logger()
 
+        self.NEIGH_PATH = NEIGH_PATH
     def _setup_logger(self):
         """
         Configure a logger that writes timestamped action logs to `self.log_path` and
@@ -144,100 +137,102 @@ class queryPerovskite(qS):
 
         with MPRester(mpAPI) as mpr:
             robocrys_docs = mpr.materials.robocrys.search(
-                keywords=["perovskite"] # set None for production, 1 for testing
+                keywords=["perovskite"],
+                chunk_size = 1,
+                num_chunks = 10, # set None for production, 1 for testing
             )
-            robo_ids = {d.material_id for d in robocrys_docs}
+            candidate_mpids = {d.material_id.string for d in robocrys_docs}
         
-        robo_ids_cleaned = set([re.sub(r"^MPID\((.*)\)$", r"\1", str(x)) for x in robo_ids])
-
-        self._log(f"Robocrys search returned {len(robo_ids_cleaned)} candidate MPIDs")
+        self._log(f"Robocrys search returned {len(candidate_mpids)} candidate MPIDs")
  
-        self._log("Starting provenance tags/remarks search for 'perovskite'")
-        with MPRester(mpAPI, use_document_model=False) as mpr2:
-            prov_docs = mpr2.materials.provenance.search(
-                fields=["material_id", "remarks", "tags"] # set None for production, 1 for testing
-            )
-
-        prov_ids = {
-            doc.get("material_id") for doc in prov_docs
-            if any("perovskite" in t.lower() for t in (doc.get("tags", []) + doc.get("remarks", [])))
-        }
-        self._log(f"Provenance search returned {len(prov_ids)} candidate MPIDs")
- 
-        candidate_mpids = list(robo_ids_cleaned | prov_ids)
-        self._log(f"Total {len(candidate_mpids)} candidate MPIDs successfully obtained (union of both sources)")
-        return candidate_mpids
-
+        self._log(f"Total {len(candidate_mpids)} candidate MPIDs successfully obtained")
+        return list(candidate_mpids)
 
     def query_ID(self, mpids):
         """
         Run the full verification pipeline (oxidation-state check, CrystalNN BX6
         connectivity check, tolerance-factor calculation) on each candidate MPID and
         save each result to its respective JSON output.
-
-        Parameters
-        ----------
-        mpids : list(str)
-            Candidate MPIDs to verify, typically the output of `obtain_ID`.
         """
+        total_start = time.perf_counter()
+
         self._log(f"Starting verification pipeline for {len(mpids)} MPIDs")
-        docs = []
 
-        for id in mpids:
-            self._log(f"Querying structure for {id}")
-            try:
-                doc = self.query(id, is_return=True)
-            except Exception as e:
-                self._log(f"ERROR querying {id}: {e}")
-                continue
+        docs = self._timed("Querying MPIDs", self.query, mpids)
+        self._timed("Processing queried structures", self.processing_query, docs)
 
-            try:
-                if check_duplicate(docs, doc):
-                    self._log(f"Skipping {id}: duplicate structure of an already-processed candidate")
-                    continue
-            except Exception as e:
-                self._log(f"ERROR checking duplicate for {id}: {e}")
-                # If duplicate check itself fails, err on the side of continuing to process it
-            docs.append(doc)
+        self._log(f"Finished Querying. Total downloaded files: {len(mpids)}")
 
-            try:
-                self.save_cif(doc)
-            except Exception as e:
-                self._log(f"ERROR saving CIF for {id}: {e}")
+        for doc in docs:
+            mpid = doc["material_id"]
+            struct_start = time.perf_counter()
 
-            try:
-                self.save_json(doc)
-            except Exception as e:
-                self._log(f"ERROR saving JSON for {id}: {e}")
+            self._log(f"Starting verification pipeline for {mpid}")
 
-            self._log(f"Running oxidation-state check for {id}")
-            try:
-                results_cO = self.cO.check_charge(doc)
+            results_cO = self._timed(
+                f"Oxidation-state check ({mpid})",
+                self.cO.check_charge,
+                doc,
+            )
+            if results_cO is not None:
                 self.cO.save_json(results_cO)
-            except Exception as e:
-                self._log(f"ERROR in oxidation-state check for {id}: {e}")
 
-            self._log(f"Running CrystalNN BX6 verification for {id}")
-            try:
-                results_cN = self.cN.verify_bx6(doc)
+            results_cN = self._timed(
+                f"CrystalNN BX6 verification ({mpid})",
+                self.cN.verify_bx6,
+                doc,
+            )
+            if results_cN is not None:
                 self.cN.save_json(results_cN)
-            except Exception as e:
-                self._log(f"ERROR in CrystalNN BX6 verification for {id}: {e}")
 
-            self._log(f"Computing tolerance factors for {id}")
-            try:
-                results_cT = self.cT.get_tolerance_factors(doc)
+            results_cT = self._timed(
+                f"Tolerance factor computation ({mpid})",
+                self.cT.get_tolerance_factors,
+                doc,
+            )
+            if results_cT is not None:
                 self.cT.save_json(results_cT)
-            except Exception as e:
-                self._log(f"ERROR computing tolerance factors for {id}: {e}")
 
-        self._log(f"Completed verification pipeline for {id}")
+            self._log(
+                f"Completed verification pipeline for {mpid} "
+                f"in {time.perf_counter() - struct_start:.3f} s"
+            )
+
+        total_elapsed = time.perf_counter() - total_start
         self._log(f"Finished verification pipeline for all {len(mpids)} MPIDs")
-        self._log(f"Total unique structure: {len(docs)}")
+        self._log(f"Total Discovered Perovskite: {self.count_perovskite()}")
+        self._log(f"Total execution time: {total_elapsed:.3f} s")
 
+    def count_perovskite(self):
+        """
+        Report the number of succesfully acquired perovskite
+        """
+        with open(self.NEIGH_PATH, 'r') as f:
+            data = json.load(f)
+
+        count = sum(1 for item in data if item.get("is_perovskite") is True)
+        return count
+
+    def _timed(self, name, func, *args, **kwargs):
+        """
+        Execute a function, log its execution time, and return the result.
+        """
+        start = time.perf_counter()
+        try:
+            result = func(*args, **kwargs)
+            elapsed = time.perf_counter() - start
+            self._log(f"{name} completed in {elapsed:.3f} s")
+            return result
+        
+        except Exception as e:
+            elapsed = time.perf_counter() - start
+            self._log(f"ERROR in {name} after {elapsed:.3f} s: {e}")
+            return None
+        
 if __name__ == "__main__":
     query = queryPerovskite()
     IDs = query.obtain_ID()
+    print(IDs)
     query.query_ID(IDs)
 
 
