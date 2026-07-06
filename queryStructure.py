@@ -44,7 +44,7 @@ class queryStructure():
         self.cif_dirs = CIF_DIRS
         self.json_path = JSON_PATH
 
-    def query(self, ID, is_return = False):
+    def query(self, ID):
         """
         Main function for querying MPIDs
         """
@@ -56,18 +56,20 @@ class queryStructure():
             )
         if len(docs) == 0:
             raise ValueError(f"No material found for {IDs}")
-        
-        doc = docs[0]
-        
-        data = {
-            k: v for k, v in doc.model_dump().items()
-            if k!= "fields_not_requested"
-        }
-        print(f"Structure {doc['material_id']} succesfully queried")
 
-        if is_return:
-            return data
-        
+        return docs
+    
+    def processing_query(self, docs):
+        for doc in docs:
+            data = {
+                k: v for k, v in doc.model_dump().items()
+                if k!= "fields_not_requested"
+            }
+            data['material_id'] = doc['material_id']
+            print(f"Structure {data['material_id']} succesfully queried")
+            self.save_cif(data)
+            self.save_json(data)
+
     def save_cif(self, data):
         """
         Save structure to CIF files
