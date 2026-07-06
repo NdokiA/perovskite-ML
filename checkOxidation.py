@@ -3,7 +3,7 @@ import json, os
 from pymatgen.core import Species 
 
 class checkOxidation():
-    def __init__(self, tolerance = 0.01, TEST_JSON_PATH = "TEST_QUERY", OUTPUT_JSON_PATH = "OXIDATION_QUERY"):
+    def __init__(self, tolerance = 0.01, TEST_JSON_PATH = "TEST_QUERY.json", OUTPUT_JSON_PATH = "OXIDATION_QUERY.json"):
         """
         Checks whether a material's composition can satisfy charge
         neutrality, by trying combinations of oxidation states pulled
@@ -14,29 +14,24 @@ class checkOxidation():
             Default 0.01.
 
         TEST_JSON_PATH : str, optional
-            Filename (without ".json") of the input query file to read from.
+            Filename of the input query file to read from.
 
         OUTPUT_JSON_PATH : str, optional
-            Filename (without ".json") to write oxidation-state results to.
+            Filename to write oxidation-state results to.
         """
 
         self.tolerance = tolerance 
-        self.json_path = TEST_JSON_PATH + ".json"
-        self.output_json = OUTPUT_JSON_PATH + ".json"
+        self.json_path = TEST_JSON_PATH
+        self.output_json = OUTPUT_JSON_PATH
     
     def load_json(self):
         with open(self.json_path, "r", encoding="utf-8") as f:
             return json.load(f)
     
-    def save_json(self, query, charge, assignment):
+    def save_json(self, metadata):
         """
         Save metadata to JSON
         """
-        metadata = {"formula_pretty": query["formula_pretty"],
-                "material_id": query["material_id"],
-                "total_charge": charge,
-                "ion_assignment": assignment
-                }
 
         if os.path.exists(self.output_json):
             with open(self.output_json, "r") as f:
@@ -93,9 +88,6 @@ class checkOxidation():
         total charge. 
         """
 
-
-
-
         elements = list(composition.keys())
         option_lists = [sorted(candidates[e]) for e in elements]
 
@@ -136,15 +128,21 @@ class checkOxidation():
         """
 
         if not doc.get("possible_species"):
-            return False, None, None
+            isNeutral, charge, assignment = False, None, None
         composition = self._get_composition(doc)
         candidates = self._get_oxidation_states(doc)
 
         if not all(element in candidates for element in composition):
-            return False, None, None
-        return self._find_best_assigment(
-            composition, candidates
-        )
+            isNeutral, charge, assignment = False, None, None
+        
+        isNeutral, charge, assignment = self._find_best_assigment(composition, candidates)
+
+        return  {"formula_pretty": query["formula_pretty"],
+                "material_id": query["material_id"],
+                "is_neutral": isNeutral,
+                "total_charge": charge,
+                "ion_assignment": assignment
+                }
     
 def write_log(log, filename = "oxidation.log"):
     if not os.path.isfile(filename):
@@ -161,8 +159,9 @@ if __name__ == "__main__":
         os.remove("OXIDATION_QUERY.json")
     queries = cO.load_json()
     for query in queries:
-        isNeutral, charge, assignment = cO.check_charge(query)
-        log = f"Structure {query['formula_pretty']} ({query['material_id']}) -> Total Charge: {charge} with ion assignment {assignment}"
+        results = cO.check_charge(query)
+        log = f"Structure {results['formula_pretty']} ({results['material_id']}) -> Total Charge: {results['total_charge']} \
+            with ion assignment {results['ion_assignment']}"
         write_log(log)
-        cO.save_json(query, charge, assignment)
+        cO.save_json(results)
         print(f"{query['material_id']} is logged")

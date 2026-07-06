@@ -26,7 +26,7 @@ FIELDS  = [
 ]
 
 class queryStructure():
-    def __init__(self, structural_ID, fields=FIELDS, CIF_DIRS = "TEST_CIF", JSON_PATH = "TEST_QUERY"):
+    def __init__(self, fields=FIELDS, CIF_DIRS = "TEST_CIF", JSON_PATH = "TEST_QUERY.json"):
         """
         Query structures from Materials Project based on its MPIDs
         structural_ID   :   str or list(str)
@@ -40,22 +40,22 @@ class queryStructure():
             file path for the json files. 
         """
 
-        self.IDs = structural_ID if isinstance(structural_ID, list) else [structural_ID]
         self.fields = fields
         self.cif_dirs = CIF_DIRS
-        self.json_path = JSON_PATH+".json"
+        self.json_path = JSON_PATH
 
-    def query(self):
+    def query(self, ID, is_return = False):
         """
         Main function for querying MPIDs
         """
+        IDs = ID if isinstance(ID, list) else [ID]
         with MPRester(mpAPI) as mpr:
             docs = mpr.materials.summary.search(
-                material_ids=self.IDs,
+                material_ids=IDs,
                 fields = self.fields,
             )
         if len(docs) == 0:
-            raise ValueError(f"No material found for {self.IDs}")
+            raise ValueError(f"No material found for {IDs}")
         
         for doc in docs:
         
@@ -67,6 +67,9 @@ class queryStructure():
             self._save_json(data)
             print(f"Structure {doc['material_id']} succesfully queried")
 
+        if is_return:
+            return docs
+        
     def _save_cif(self, data):
         """
         Save structure to CIF files
@@ -105,18 +108,6 @@ class queryStructure():
             json.dump(results, f, indent=2)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Query one structure from Materials Project"
-    )
+    query = queryStructure()
+    query.query(["mp-4651", "mp-2998", "mp-5827", "mp-4019", "mp-1079517", "mp-19127", "mp-18857"])
 
-    parser.add_argument(
-        "-q", "--query",
-        nargs="+",
-        required=True,
-    )
-    args = parser.parse_args()
-    structural_ID = args.query
-    query = queryStructure(structural_ID)
-    query.query()
-
-#["mp-4651", "mp-2998", "mp-5827", "mp-4019", "mp-1079517", "mp-19127", "mp-18857"]

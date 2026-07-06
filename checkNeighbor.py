@@ -5,8 +5,8 @@ from pymatgen.analysis.bond_valence import BVAnalyzer
 import os, json
 
 class checkNeighbor():
-    def __init__(self, JSON_PATH = "TEST_QUERY", OXI_PATH = "OXIDATION_QUERY", CIF_DIR = "TEST_CIF",
-                 OUTPUT_JSON = "NEIGHBOR_QUERY"):
+    def __init__(self, JSON_PATH = "TEST_QUERY.json", OXI_PATH = "OXIDATION_QUERY.json", CIF_DIR = "TEST_CIF",
+                 OUTPUT_JSON = "NEIGHBOR_QUERY.json"):
         """
         Given a crystal structure (.cif), checks whether its cation sites
         form BX6 octahedra (6 anion neighbors) and whether those octahedra
@@ -14,12 +14,12 @@ class checkNeighbor():
         a perovskite-type structure.
 
         JSON_PATH : str, optional
-            Filename (without ".json") of the query file listing materials
+            Filename of the query file listing materials
             to check (each entry needs at least "material_id", and either
             "cif_file" or a CIF named after its material_id).
 
         OXI_PATH : str, optional
-            Filename (without ".json") of oxidation-state results from
+            Filename of oxidation-state results from
             checkOxidation.py, keyed by material_id. Pass None to skip
             loading this and rely on possible_species / BVAnalyzer instead.
 
@@ -27,11 +27,10 @@ class checkNeighbor():
             Folder containing the .cif files referenced by JSON_PATH.
         """
 
-        self.JSON_PATH = JSON_PATH + ".json"
-        self.OXI_PATH = OXI_PATH + ".json" if OXI_PATH else None
+        self.JSON_PATH = JSON_PATH
+        self.OXI_PATH = OXI_PATH if OXI_PATH else None
         self.CIF_DIR = CIF_DIR
-        self.OUTPUT_PATH = OUTPUT_JSON + ".json"
-        self.oxi_index = self._load_oxi_index() if OXI_PATH else {}
+        self.OUTPUT_PATH = OUTPUT_JSON
 
     def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
@@ -321,6 +320,7 @@ class checkNeighbor():
         (cn, connectivity, corner_share_fraction, hetero_corner_fraction)
         for inspection.
         """       
+        self.oxi_index = self._load_oxi_index() if self.OXI_PATH else {}
 
         oxi_map = self._get_oxi_map(doc)
         structure = self._extract_cif(doc, oxi_map)

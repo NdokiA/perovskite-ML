@@ -5,8 +5,8 @@ _CN_ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI",
              7: "VII", 8: "VIII", 9: "IX", 12: "XII"}
  
 class checkTolerance():
-    def __init__(self, JSON_PATH = "TEST_QUERY", OXI_PATH="OXIDATION_QUERY", NEIGH_PATH="NEIGHBOR_QUERY",
-                OUTPUT_JSON = "TOLERANCE_QUERY"):
+    def __init__(self, JSON_PATH = "TEST_QUERY.json", OXI_PATH="OXIDATION_QUERY.json", NEIGH_PATH="NEIGHBOR_QUERY.json",
+                OUTPUT_JSON = "TOLERANCE_QUERY.json"):
         """
         Computes perovskite tolerance factors (octahedral factor mu,
         Goldschmidt t, Bartel tau) from checkOxidation.py and
@@ -14,15 +14,13 @@ class checkTolerance():
         Every radius/oxidation-state value is a lookup by element, not a
         measurement off the actual structure.
  
-        OXI_PATH   : str, filename (without .json) of checkOxidation.py's output
-        NEIGH_PATH : str, filename (without .json) of checkNeighbor.py's output
+        OXI_PATH   : str, filename of checkOxidation.py's output
+        NEIGH_PATH : str, filename of checkNeighbor.py's output
         """
-        self.OXI_PATH = OXI_PATH + ".json"
-        self.NEIGH_PATH = NEIGH_PATH + ".json"
-        self.JSON_PATH = JSON_PATH + ".json"
-        self.OUTPUT_PATH = OUTPUT_JSON + ".json"
-        self.oxi_index = self._load_oxi_index()
-        self.ion_index = self._load_ion_assigments()
+        self.OXI_PATH = OXI_PATH
+        self.NEIGH_PATH = NEIGH_PATH
+        self.JSON_PATH = JSON_PATH
+        self.OUTPUT_PATH = OUTPUT_JSON
     
     def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
@@ -129,6 +127,8 @@ class checkTolerance():
         the real structure
  
         """
+        self.oxi_index = self._load_oxi_index()
+        self.ion_index = self._load_ion_assigments()
         oxi_map = self._get_oxi_map(doc)
         a_elements, b_elements, x_elements = self._get_ion_assignments(doc)
         if a_elements is None:
