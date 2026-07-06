@@ -267,29 +267,30 @@ class checkNeighbor():
                     })
         return pairs
 
-    def is_perovskite(self, cn_results, conn_results, require_corner=True):
+    def is_perovskite(self, cn_results, conn_results,
+                    require_corner=True, corner_frac_threshold=0.9):
         """
-        
-        True/False call: a structure counts as perovskite if at least
-        one site has CN==6 (a real BX6 octahedron) AND those octahedra
-        actually connect to each other.
-
-        require_corner=True (default here) means only corner-sharing
-        counts as a real perovskite connection — edge/face-sharing alone
-        won't pass. Set False to accept any kind of touching as "connected".
-
+        True/False call: a structure counts as perovskite if at least one
+        site has CN==6 (a real BX6 octahedron) AND the octahedral network
+        connecting those confirmed B sites is corner-sharing OVERWHELMINGLY
+        (>= corner_frac_threshold of B-B contacts), not just partially.
         """
         b_sites = [ci for ci, r in cn_results.items() if r["CN_ok"]]
         if not b_sites:
-            return False, b_sites
+            return False, b_sites, 0.0
+
+        b_conn = [p for p in conn_results if p["i"] in b_sites and p["j"] in b_sites]
+        if not b_conn:
+            return False, b_sites, 0.0
+
+        corner_frac = sum(p["mode"] == "corner" for p in b_conn) / len(b_conn)
+
         if require_corner:
-            has_net = any(p["mode"] == "corner"
-                          and p["i"] in b_sites and p["j"] in b_sites
-                          for p in conn_results)
+            has_net = corner_frac >= corner_frac_threshold
         else:
-            has_net = any(p["i"] in b_sites and p["j"] in b_sites
-                          for p in conn_results)
-        return has_net, b_sites
+            has_net = True
+
+        return has_net, b_sites, corner_frac
 
     
     def verify_bx6(self, doc, x_elements = None, b_elements = None, cn_target=6, cn_tol=0,
@@ -340,7 +341,7 @@ class checkNeighbor():
         cn_results = self._check_cn(poly_map, cn_target, cn_tol)
         conn_results = self._check_pairwise_connectivity(structure, poly_map)
 
-        perov, b_sites = self.is_perovskite(cn_results, conn_results, require_corner)
+        perov, b_sites, corner_frac = self.is_perovskite(cn_results, conn_results, require_corner)
  
         # true B elements = elements actually at CN=6 sites
         b_true = sorted({self._site_label(structure, ci) for ci in b_sites})
@@ -353,8 +354,6 @@ class checkNeighbor():
 
         b_conn = [p for p in conn_results if p['i'] in b_sites and p['j'] in b_sites]
 
-        corner_frac = (sum(p['mode'] == 'corner' for p in b_conn)
-                       / len(b_conn) if b_conn else 0.0)
         n_corner = sum(p['mode'] == "corner" for p in b_conn)
         hetero_corner_frac = (sum(p["mode"] == "corner" and p["hetero"] for p in b_conn)
                               / n_corner if n_corner else None)

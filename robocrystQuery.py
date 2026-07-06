@@ -162,7 +162,7 @@ class queryPerovskite(qS):
 
         prov_ids = {
             doc.get("material_id") for doc in prov_docs
-            #if any("perovskite" in t.lower() for t in (doc.get("tags", []) + doc.get("remarks", [])))
+            if any("perovskite" in t.lower() for t in (doc.get("tags", []) + doc.get("remarks", [])))
         }
         self._log(f"Provenance search returned {len(prov_ids)} candidate MPIDs")
  
