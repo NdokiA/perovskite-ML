@@ -5,49 +5,57 @@ from pymatgen.analysis.bond_valence import BVAnalyzer
 import os, json
 
 class checkNeighbor():
-    def __init__(self, JSON_PATH = "TEST_QUERY", OXI_PATH = "OXIDATION_QUERY", CIF_DIR = "TEST_CIF"):
+    def __init__(self, JSON_PATH = "TEST_QUERY", OXI_PATH = "OXIDATION_QUERY", CIF_DIR = "TEST_CIF",
+                 OUTPUT_JSON = "NEIGHBOR_QUERY"):
         """
-
         Given a crystal structure (.cif), checks whether its cation sites
-
         form BX6 octahedra (6 anion neighbors) and whether those octahedra
-
         connect to each other by sharing corners — the defining feature of
-
         a perovskite-type structure.
 
-
-
         JSON_PATH : str, optional
-
             Filename (without ".json") of the query file listing materials
-
             to check (each entry needs at least "material_id", and either
-
             "cif_file" or a CIF named after its material_id).
 
         OXI_PATH : str, optional
-
             Filename (without ".json") of oxidation-state results from
-
             checkOxidation.py, keyed by material_id. Pass None to skip
-
             loading this and rely on possible_species / BVAnalyzer instead.
 
         CIF_DIR : str, optional
-
             Folder containing the .cif files referenced by JSON_PATH.
-
         """
 
         self.JSON_PATH = JSON_PATH + ".json"
         self.OXI_PATH = OXI_PATH + ".json" if OXI_PATH else None
         self.CIF_DIR = CIF_DIR
+        self.OUTPUT_PATH = OUTPUT_JSON + ".json"
         self.oxi_index = self._load_oxi_index() if OXI_PATH else {}
 
-    def _load_json(self):
+    def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
+    
+    def save_json(self, metadata):
+        """
+        Save metadata to JSON
+        """
+
+        if os.path.exists(self.OUTPUT_PATH):
+            with open(self.OUTPUT_PATH, "r") as f:
+                try:
+                    results = json.load(f)
+                    if not isinstance(results, list):
+                        results = [results]
+                except json.JSONDecodeError:
+                    results = []
+        else:
+            results = []
+        
+        results.append(metadata)
+        with open(self.OUTPUT_PATH, "w") as f:
+            json.dump(results, f, indent=2)
     
     def _load_oxi_index(self):
         """index checkoxidation results by material_id"""
@@ -353,6 +361,7 @@ class checkNeighbor():
 
         return {
             "material_id": doc.get("material_id"),
+            "formula_pretty": doc.get("formula_pretty"),
             "is_perovskite": perov,
             "x_elements": x_elements,
             "b_candidates": b_elements,
@@ -373,9 +382,9 @@ def write_log(log, filename = "neighbor.log"):
 
 if __name__ == "__main__":
     cN = checkNeighbor(JSON_PATH="TEST_QUERY", CIF_DIR="TEST_CIF")
-    if os.path.exists("neigbor.log"):
+    if os.path.exists("neighbor.log"):
         os.remove("neighbor.log")
-    queries = cN._load_json()
+    queries = cN.load_json()
     for query in queries:
         try:
             result = cN.verify_bx6(query)
@@ -383,7 +392,8 @@ if __name__ == "__main__":
             print(f"SKIP {query.get('material_id')} -> {e}")
             continue
         log = (f"{result['material_id']} | perovskite={result['is_perovskite']} "
-               f"| B={result['b_true']} | n_B={result['n_b_sites']} "
+               f"| B={result['b_true']} | X  ={result['x_elements']} | n_B={result['n_b_sites']} "
                f"| corner_frac={result['corner_share_fraction']:.2f}")
+        cN.save_json(result)
         write_log(log)
         print(log)
