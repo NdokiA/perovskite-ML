@@ -3,6 +3,7 @@
 venv/
 env/
 ENV/
+config.py 
 
 # Byte-compiled / cache files
 __pycache__/

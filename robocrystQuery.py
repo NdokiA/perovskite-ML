@@ -1,12 +1,20 @@
-import os, logging
+import os, logging, re
 from config import mpAPI
 from mp_api.client import MPRester
-from emmet.core.symmetry import CrystalSystem
 from queryTest import queryStructure as qS
 from checkNeighbor import checkNeighbor as cN
 from checkOxidation import checkOxidation as cO 
 from checkTolerance import checkTolerance as cT
 from pathlib import Path
+from pymatgen.analysis.structure_matcher import StructureMatcher
+
+def check_duplicate(unique_docs, doc):
+    """
+    docs: list of MP summary docs (must include `structure` field)
+    Returns deduplicated list, keeping the first occurrence of each unique structure.
+    """
+    matcher = StructureMatcher()
+    return any(matcher.fit(doc.structure, kept.structure) for kept in unique_docs)
 
 FIELDS  = [
     # Identifiers
@@ -67,8 +75,9 @@ class queryPerovskite(qS):
         TOL_PATH = Path(TOL_PATH)
         LOG_PATH = Path(LOG_PATH)
 
-        for path in [CIF_DIRS, JSON_PATH, OXI_PATH, NEIGH_PATH, TOL_PATH, LOG_PATH]:
+        for path in [JSON_PATH, OXI_PATH, NEIGH_PATH, TOL_PATH, LOG_PATH]:
             path.parent.mkdir(parents=True, exist_ok=True)
+        os.makedirs(CIF_DIRS, exist_ok=True)
         
         super().__init__(fields, CIF_DIRS, JSON_PATH)
         self.cN = cN(JSON_PATH, OXI_PATH, CIF_DIRS, NEIGH_PATH)
@@ -139,36 +148,25 @@ class queryPerovskite(qS):
                 chunk_size=1, num_chunks=1,  # set None for production, 1 for testing
             )
             robo_ids = {d.material_id for d in robocrys_docs}
-        self._log(f"Robocrys search returned {len(robo_ids)} candidate MPIDs")
- 
-        self._log("Narrowing candidates by crystal system before provenance search")
-        candidate_ids = set()
-        with MPRester(mpAPI) as mpr_summary:
-            summary_docs = mpr_summary.materials.summary.search(
-                num_elements=(3, 5),
-                energy_above_hull=(0, 0.4),
-                fields=["material_id"],
-                chunk_size=1, num_chunks=1,  # set None for production, 1 for testing
-            )
-            candidate_ids.update(d.material_id for d in summary_docs)
+        
+        robo_ids_cleaned = set([re.sub(r"^MPID\((.*)\)$", r"\1", str(x)) for x in robo_ids])
 
-        self._log(f"Summary pre-filter narrowed to {len(candidate_ids)} material IDs ")
+        self._log(f"Robocrys search returned {len(robo_ids_cleaned)} candidate MPIDs")
  
         self._log("Starting provenance tags/remarks search for 'perovskite'")
         with MPRester(mpAPI, use_document_model=False) as mpr2:
             prov_docs = mpr2.materials.provenance.search(
-                material_ids=list(candidate_ids),
                 fields=["material_id", "remarks", "tags"],
                 chunk_size=1, num_chunks=1,  # set None for production, 1 for testing
             )
 
         prov_ids = {
             doc.get("material_id") for doc in prov_docs
-            if any("perovskite" in t.lower() for t in (doc.get("tags", []) + doc.get("remarks", [])))
+            #if any("perovskite" in t.lower() for t in (doc.get("tags", []) + doc.get("remarks", [])))
         }
         self._log(f"Provenance search returned {len(prov_ids)} candidate MPIDs")
  
-        candidate_mpids = list(robo_ids | prov_ids)
+        candidate_mpids = list(robo_ids_cleaned | prov_ids)
         self._log(f"Total {len(candidate_mpids)} candidate MPIDs successfully obtained (union of both sources)")
         return candidate_mpids
 
@@ -185,13 +183,22 @@ class queryPerovskite(qS):
             Candidate MPIDs to verify, typically the output of `obtain_ID`.
         """
         self._log(f"Starting verification pipeline for {len(mpids)} MPIDs")
+        docs = []
         for id in mpids:
             self._log(f"Querying structure for {id}")
             try:
-                doc = self.query(id)[0]
+                doc = self.query(id, is_return=True)
             except Exception as e:
                 self._log(f"ERROR querying {id}: {e}")
                 continue
+
+            if check_duplicate(docs, doc):
+                self._log(f"Skipping {id}: duplicate structure of an already-processed candidate")
+                continue
+            docs.append(doc)
+
+            self.save_cif(doc)
+            self.save_json(doc)
 
             self._log(f"Running oxidation-state check for {id}")
             results_cO = self.cO.check_charge(doc)
@@ -211,7 +218,7 @@ class queryPerovskite(qS):
 if __name__ == "__main__":
     query = queryPerovskite()
     IDs = query.obtain_ID()
-    print(IDs)
+    query.query_ID(IDs)
 
 
     

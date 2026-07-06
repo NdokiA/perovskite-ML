@@ -57,20 +57,18 @@ class queryStructure():
         if len(docs) == 0:
             raise ValueError(f"No material found for {IDs}")
         
-        for doc in docs:
+        doc = docs[0]
         
-            data = {
-                k: v for k, v in doc.model_dump().items()
-                if k!= "fields_not_requested"
-            }
-            self._save_cif(data)
-            self._save_json(data)
-            print(f"Structure {doc['material_id']} succesfully queried")
+        data = {
+            k: v for k, v in doc.model_dump().items()
+            if k!= "fields_not_requested"
+        }
+        print(f"Structure {doc['material_id']} succesfully queried")
 
         if is_return:
-            return docs
+            return data
         
-    def _save_cif(self, data):
+    def save_cif(self, data):
         """
         Save structure to CIF files
         """
@@ -85,7 +83,7 @@ class queryStructure():
         with open(cif_path, "w") as f:
             f.write(structure.to(fmt="cif"))
     
-    def _save_json(self, data):
+    def save_json(self, data):
         """
         Save metadata to JSON
         """
@@ -106,8 +104,3 @@ class queryStructure():
         results.append(metadata)
         with open(self.json_path, "w") as f:
             json.dump(results, f, indent=2)
-
-if __name__ == "__main__":
-    query = queryStructure()
-    query.query(["mp-4651", "mp-2998", "mp-5827", "mp-4019", "mp-1079517", "mp-19127", "mp-18857"])
-

@@ -372,28 +372,3 @@ class checkNeighbor():
             "corner_share_fraction": corner_frac,
             "hetero_corner_fraction": hetero_corner_frac,
         }
-
-
-def write_log(log, filename = "neighbor.log"):
-    mode = "w" if not os.path.isfile(filename) else "a"
-    prefix = "" if mode == "w" else "\n"
-    with open(filename, mode, encoding="utf-8") as file:
-        file.write(prefix + log)
-
-if __name__ == "__main__":
-    cN = checkNeighbor(JSON_PATH="TEST_QUERY", CIF_DIR="TEST_CIF")
-    if os.path.exists("neighbor.log"):
-        os.remove("neighbor.log")
-    queries = cN.load_json()
-    for query in queries:
-        try:
-            result = cN.verify_bx6(query)
-        except Exception as e:
-            print(f"SKIP {query.get('material_id')} -> {e}")
-            continue
-        log = (f"{result['material_id']} | perovskite={result['is_perovskite']} "
-               f"| B={result['b_true']} | X  ={result['x_elements']} | n_B={result['n_b_sites']} "
-               f"| corner_frac={result['corner_share_fraction']:.2f}")
-        cN.save_json(result)
-        write_log(log)
-        print(log)

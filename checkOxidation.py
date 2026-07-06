@@ -137,31 +137,10 @@ class checkOxidation():
         
         isNeutral, charge, assignment = self._find_best_assigment(composition, candidates)
 
-        return  {"formula_pretty": query["formula_pretty"],
-                "material_id": query["material_id"],
+        return  {"formula_pretty": doc["formula_pretty"],
+                "material_id": doc["material_id"],
                 "is_neutral": isNeutral,
                 "total_charge": charge,
                 "ion_assignment": assignment
                 }
     
-def write_log(log, filename = "oxidation.log"):
-    if not os.path.isfile(filename):
-        with open(filename, "w", encoding = "utf-8") as file:
-            file.write(log)
-    else:
-        with open(filename, "a", encoding = "utf-8") as file:
-            file.write("\n"+log)
-
-if __name__ == "__main__":
-    cO = checkOxidation()
-    if os.path.exists("oxidation.log"):
-        os.remove("oxidation.log")
-        os.remove("OXIDATION_QUERY.json")
-    queries = cO.load_json()
-    for query in queries:
-        results = cO.check_charge(query)
-        log = f"Structure {results['formula_pretty']} ({results['material_id']}) -> Total Charge: {results['total_charge']} \
-            with ion assignment {results['ion_assignment']}"
-        write_log(log)
-        cO.save_json(results)
-        print(f"{query['material_id']} is logged")

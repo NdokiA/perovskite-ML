@@ -155,27 +155,3 @@ class checkTolerance():
             "goldschmidt_t": t,
             "bartel_tau": tau,
         }
-
-def write_log(log, filename = "tolerance.log"):
-    mode = "w" if not os.path.isfile(filename) else "a"
-    prefix = "" if mode == "w" else "\n"
-    with open(filename, mode, encoding="utf-8") as file:
-        file.write(prefix + log)
-
-if __name__ == "__main__":
-    cT = checkTolerance()
-    if os.path.exists("tolerance.log"):
-        os.remove("tolerance.log")
-    queries = cT.load_json()
-    for query in queries:
-        try:
-            result = cT.get_tolerance_factors(query)
-        except Exception as e:
-            print(f"SKIP {query.get('material_id')}")
-            continue
-        log = (f"{result['material_id']} | a_elements ={result['a_elements']} "
-               f"| b_elements={result['b_elements']} | x_elements ={result['x_elements']} | octahedral={result['octahedral_factor']:.2f} "
-               f"| goldschmidt={result['goldschmidt_t']:.2f} | bartel = {result['bartel_tau']}")
-        cT.save_json(result)
-        write_log(log)
-        print(log)
