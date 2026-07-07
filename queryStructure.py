@@ -66,7 +66,6 @@ class queryStructure():
                 if k!= "fields_not_requested"
             }
             data['material_id'] = doc['material_id']
-            print(f"Structure {data['material_id']} succesfully queried")
             self.save_cif(data)
             self.save_json(data)
 

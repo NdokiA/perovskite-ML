@@ -138,8 +138,8 @@ class queryPerovskite(qS):
         with MPRester(mpAPI) as mpr:
             robocrys_docs = mpr.materials.robocrys.search(
                 keywords=["perovskite"],
-                chunk_size = 1,
-                num_chunks = 10, # set None for production, 1 for testing
+                chunk_size = 1000,
+                num_chunks = None, # set None for production, 1 for testing
             )
             candidate_mpids = {d.material_id.string for d in robocrys_docs}
         
