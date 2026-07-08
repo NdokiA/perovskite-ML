@@ -1,4 +1,4 @@
-import os, json, argparse, ast
+import os, json, argparse, ast, logging
 from pymatgen.core import Structure
 from config import mpAPI
 from mp_api.client import MPRester
@@ -26,7 +26,8 @@ FIELDS  = [
 ]
 
 class queryStructure():
-    def __init__(self, fields=FIELDS, CIF_DIRS = "TEST_CIF", JSON_PATH = "TEST_QUERY.json"):
+    def __init__(self, fields=FIELDS, CIF_DIRS = "TEST_CIF", JSON_PATH = "TEST_QUERY.json",
+                 logger = None):
         """
         Query structures from Materials Project based on its MPIDs
         structural_ID   :   str or list(str)
@@ -43,6 +44,7 @@ class queryStructure():
         self.fields = fields
         self.cif_dirs = CIF_DIRS
         self.json_path = JSON_PATH
+        self.logger  = logger if logger is not None else logging.getLogger(__name__)
 
     def query(self, ID):
         """
@@ -55,7 +57,7 @@ class queryStructure():
                 fields = self.fields,
             )
         if len(docs) == 0:
-            raise ValueError(f"No material found for {IDs}")
+            self.logger.error(f"No material found for {IDs}")
 
         return docs
     

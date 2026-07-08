@@ -6,7 +6,6 @@ from checkNeighbor import checkNeighbor as cN
 from checkOxidation import checkOxidation as cO 
 from checkTolerance import checkTolerance as cT
 from pathlib import Path
-from pymatgen.analysis.structure_matcher import StructureMatcher
 
 FIELDS  = [
     # Identifiers
@@ -71,13 +70,14 @@ class queryPerovskite(qS):
             path.parent.mkdir(parents=True, exist_ok=True)
         os.makedirs(CIF_DIRS, exist_ok=True)
         
-        super().__init__(fields, CIF_DIRS, JSON_PATH)
-        self.cN = cN(JSON_PATH, OXI_PATH, CIF_DIRS, NEIGH_PATH)
-        self.cO = cO(TEST_JSON_PATH=JSON_PATH,
-                     OUTPUT_JSON_PATH=OXI_PATH)
-        self.cT = cT(JSON_PATH, OXI_PATH, NEIGH_PATH, TOL_PATH)
         self.log_path = LOG_PATH
         self._setup_logger()
+
+        super().__init__(fields, CIF_DIRS, JSON_PATH, logger=self.logger)
+        self.cN = cN(JSON_PATH, OXI_PATH, CIF_DIRS, NEIGH_PATH, logger = self.logger)
+        self.cO = cO(TEST_JSON_PATH=JSON_PATH,
+                     OUTPUT_JSON_PATH=OXI_PATH, logger = self.logger)
+        self.cT = cT(JSON_PATH, OXI_PATH, NEIGH_PATH, TOL_PATH, logger = self.logger)
 
         self.NEIGH_PATH = NEIGH_PATH
     def _setup_logger(self):
@@ -155,10 +155,14 @@ class queryPerovskite(qS):
         save each result to its respective JSON output.
         """
         total_start = time.perf_counter()
-
+        if not mpids:
+            self._log("No candidate MPIDs provided. Aborting pipeline")
+            return
+        
         self._log(f"Starting verification pipeline for {len(mpids)} MPIDs")
 
         docs = self._timed("Querying MPIDs", self.query, mpids)
+
         self._timed("Processing queried structures", self.processing_query, docs)
 
         self._log(f"Finished Querying. Total downloaded files: {len(mpids)}")
