@@ -1,12 +1,13 @@
 import json, math, os
 from pymatgen.core import Species
 import traceback
+import logging
 _CN_ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI",
              7: "VII", 8: "VIII", 9: "IX", 12: "XII"}
  
 class checkTolerance():
     def __init__(self, JSON_PATH = "TEST_QUERY.json", OXI_PATH="OXIDATION_QUERY.json", NEIGH_PATH="NEIGHBOR_QUERY.json",
-                OUTPUT_JSON = "TOLERANCE_QUERY.json"):
+                OUTPUT_JSON = "TOLERANCE_QUERY.json", logger = None):
         """
         Computes perovskite tolerance factors (octahedral factor mu,
         Goldschmidt t, Bartel tau) from checkOxidation.py and
@@ -21,6 +22,7 @@ class checkTolerance():
         self.NEIGH_PATH = NEIGH_PATH
         self.JSON_PATH = JSON_PATH
         self.OUTPUT_PATH = OUTPUT_JSON
+        self.logger  = logger if logger is not None else logging.getLogger(__name__)
     
     def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
@@ -132,27 +134,40 @@ class checkTolerance():
         oxi_map = self._get_oxi_map(doc)
         a_elements, b_elements, x_elements = self._get_ion_assignments(doc)
         if a_elements is None:
+            self.logger.error(f"{doc.get('material_id')} is not perovskite, returning None")
             return {
             "material_id": doc.get("material_id"),
-            "a_elements": None, "b_elements": b_elements, "x_elements": x_elements,
+            "a_elements": a_elements, "b_elements": b_elements, "x_elements": x_elements,
             "r_A": None, "r_B": None, "r_X": None, "n_A": None,
             "octahedral_factor": None,
             "goldschmidt_t": None,
             "bartel_tau": None,
         }
- 
-        r_A = self._avg_radius(a_elements, oxi_map, 12)
-        r_B = self._avg_radius(b_elements, oxi_map, 6)
-        r_X = self._avg_radius(x_elements, oxi_map, 6)
-        n_A = self._avg_oxi_state(a_elements, oxi_map)
- 
-        mu = r_B / r_X
-        t = (r_A + r_X) / (math.sqrt(2) * (r_B + r_X))
-        ratio = r_A / r_B
-        # NOTE: ratio -> 1 (r_A == r_B) blows this up (division by ln(1)=0).
-        # Not expected for real perovskites (A is always much bigger than
-        # B), but worth a guard if this ever runs on weird/edge compositions.
-        tau = r_X / r_B - n_A * (n_A - ratio / math.log(ratio))
+
+        try:
+            r_A = self._avg_radius(a_elements, oxi_map, 12)
+            r_B = self._avg_radius(b_elements, oxi_map, 6)
+            r_X = self._avg_radius(x_elements, oxi_map, 6)
+            n_A = self._avg_oxi_state(a_elements, oxi_map)
+    
+            mu = r_B / r_X
+            t = (r_A + r_X) / (math.sqrt(2) * (r_B + r_X))
+            ratio = r_A / r_B
+            # NOTE: ratio -> 1 (r_A == r_B) blows this up (division by ln(1)=0).
+            # Not expected for real perovskites (A is always much bigger than
+            # B), but worth a guard if this ever runs on weird/edge compositions.
+            tau = r_X / r_B - n_A * (n_A - ratio / math.log(ratio))
+        except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
+            self.logger.error(f"Tolerance factor computation failed ({doc.get('material_id')}): {e!r}")
+            return {
+                "material_id": doc.get("material_id"),
+                "a_elements": a_elements, "b_elements": b_elements, "x_elements": x_elements,
+                "r_A": None, "r_B": None, "r_X": None, "n_A": None,
+                "octahedral_factor": None,
+                "goldschmidt_t": None,
+                "bartel_tau": None,
+            }
+
  
         return {
             "material_id": doc.get("material_id"),

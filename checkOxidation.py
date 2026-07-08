@@ -1,9 +1,10 @@
 from itertools import product
-import json, os
+import json, os, logging
 from pymatgen.core import Species 
 
 class checkOxidation():
-    def __init__(self, tolerance = 0.01, TEST_JSON_PATH = "TEST_QUERY.json", OUTPUT_JSON_PATH = "OXIDATION_QUERY.json"):
+    def __init__(self, tolerance = 0.01, TEST_JSON_PATH = "TEST_QUERY.json", OUTPUT_JSON_PATH = "OXIDATION_QUERY.json",
+                 logger = None):
         """
         Checks whether a material's composition can satisfy charge
         neutrality, by trying combinations of oxidation states pulled
@@ -23,6 +24,7 @@ class checkOxidation():
         self.tolerance = tolerance 
         self.json_path = TEST_JSON_PATH
         self.output_json = OUTPUT_JSON_PATH
+        self.logger  = logger if logger is not None else logging.getLogger(__name__)
     
     def load_json(self):
         with open(self.json_path, "r", encoding="utf-8") as f:
@@ -128,8 +130,10 @@ class checkOxidation():
         """
 
         if not doc.get("possible_species"):
+            self.logger.error(f"Possible species of {doc['material_id']} is not found")
             isNeutral, charge, assignment = False, None, None
         elif not all(element in self._get_oxidation_states(doc) for element in self._get_composition(doc)):
+            self.logger.error(f"Inconsistency in {doc['material_id']} oxidation states and composition")
             isNeutral, charge, assignment = False, None, None
         else:
             composition = self._get_composition(doc)

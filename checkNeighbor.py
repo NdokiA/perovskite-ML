@@ -2,11 +2,11 @@ from itertools import combinations
 from pymatgen.core import Structure, Species
 from pymatgen.analysis.local_env import CrystalNN
 from pymatgen.analysis.bond_valence import BVAnalyzer
-import os, json
+import os, json, logging
 
 class checkNeighbor():
     def __init__(self, JSON_PATH = "TEST_QUERY.json", OXI_PATH = "OXIDATION_QUERY.json", CIF_DIR = "TEST_CIF",
-                 OUTPUT_JSON = "NEIGHBOR_QUERY.json"):
+                 OUTPUT_JSON = "NEIGHBOR_QUERY.json", logger = None):
         """
         Given a crystal structure (.cif), checks whether its cation sites
         form BX6 octahedra (6 anion neighbors) and whether those octahedra
@@ -31,6 +31,7 @@ class checkNeighbor():
         self.OXI_PATH = OXI_PATH if OXI_PATH else None
         self.CIF_DIR = CIF_DIR
         self.OUTPUT_PATH = OUTPUT_JSON
+        self.logger = logger if logger is not None else logging.getLogger(__name__)
 
     def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
