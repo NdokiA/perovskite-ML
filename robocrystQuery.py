@@ -32,7 +32,8 @@ FIELDS  = [
 class queryPerovskite(qS):
     def __init__(self, fields=FIELDS, CIF_DIRS="QUERY/CIF", JSON_PATH="QUERY/QUERY.json",
                  OXI_PATH="QUERY/OXIDATION_QUERY.json", NEIGH_PATH="QUERY/NEIGHBOR_QUERY.json",
-                 TOL_PATH="QUERY/TOLERANCE_QUERY.json", LOG_PATH="QUERY/LOG_QUERY/query.log"):
+                 TOL_PATH="QUERY/TOLERANCE_QUERY.json", LOG_PATH="QUERY/LOG_QUERY/queryRobo.log",
+                 BATCH_QUERY = 9999):
         """
         Query and structurally verify candidate perovskite structures from Materials Project.
 
@@ -80,6 +81,8 @@ class queryPerovskite(qS):
         self.cT = cT(JSON_PATH, OXI_PATH, NEIGH_PATH, TOL_PATH, logger = self.logger)
 
         self.NEIGH_PATH = NEIGH_PATH
+
+        self.BATCH_QUERY = BATCH_QUERY
     def _setup_logger(self):
         """
         Configure a logger that writes timestamped action logs to `self.log_path` and
@@ -148,6 +151,12 @@ class queryPerovskite(qS):
         self._log(f"Total {len(candidate_mpids)} candidate MPIDs successfully obtained")
         return list(candidate_mpids)
 
+    def batch_ID(self, mpids):
+        batches = [mpids[i:i+self.BATCH_QUERY] 
+                   for i in range(0, len(mpids), self.BATCH_QUERY)
+                    ]
+        return batches
+    
     def query_ID(self, mpids):
         """
         Run the full verification pipeline (oxidation-state check, CrystalNN BX6
@@ -159,13 +168,29 @@ class queryPerovskite(qS):
             self._log("No candidate MPIDs provided. Aborting pipeline")
             return
         
-        self._log(f"Starting verification pipeline for {len(mpids)} MPIDs")
+        batches = self._timed(f"Batching queried structures", self.batch_ID(mpids))
+        self._log(f"Querying in {len(batches)} batch(es) of up to {self.MAX_IDS_PER_QUERY} MPIDs")
 
-        docs = self._timed("Querying MPIDs", self.query, mpids)
+        docs = []
+        self._log(f"Starting verification pipeline for {len(mpids)} MPIDs")
+        for batch_num, batch in enumerate(batches, start = 1):
+            batch_docs = self._timed(
+                f"Querying MPIDs (batch {batch_num}/{len(batches)})",
+                self.query,
+                batch
+            )
+
+            if batch_docs is None:
+                self._log(
+                    f"Batch {batch_num}/{len(batches)} failed -- "
+                    f"skipping its {len(batch)} MPIDs"
+                )
+                continue
+            docs.extend(batch_docs)
+
 
         self._timed("Processing queried structures", self.processing_query, docs)
-
-        self._log(f"Finished Querying. Total downloaded files: {len(mpids)}")
+        self._log(f"Finished Querying. Total downloaded files: {len(docs)} of requested {len(mpids)}")
 
         for doc in docs:
             mpid = doc["material_id"]

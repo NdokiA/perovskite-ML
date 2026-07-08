@@ -15,14 +15,15 @@ def load_json(path):
 
 
 class queryPerovskite_Formula(qP):
-    def __init__(self, formula = None):
+    def __init__(self, formula = None, LOG_PATH="QUERY/LOG_QUERY/queryFormula.log",
+                 BATCH_QUERY = 9999):
         """
         Query and structurally verify candidate perovskite structures from Materials Project.
 
         Candidates are first identified based on formula_anonymous keyword and various others
         """
         
-        super().__init__()
+        super().__init__(LOG_PATH=LOG_PATH, BATCH_QUERY=BATCH_QUERY)
         files = load_json(self.json_path) if os.path.exists(self.json_path) else None
         self.formula = formula 
         self.queried = {}
