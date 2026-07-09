@@ -3,7 +3,7 @@ from pymatgen.core import Species
 import traceback
 import logging
 _CN_ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI",
-             7: "VII", 8: "VIII", 9: "IX", 12: "XII"}
+             7: "VII", 8: "VIII", 9: "IX", 10: "X", 11: "XI", 12: "XII"}
  
 class checkTolerance():
     def __init__(self, JSON_PATH = "TEST_QUERY.json", OXI_PATH="OXIDATION_QUERY.json", NEIGH_PATH="NEIGHBOR_QUERY.json",
@@ -85,6 +85,13 @@ class checkTolerance():
         a_elements = sorted(set(entry["b_candidates"]) - set(b_elements))
         return a_elements, b_elements, x_elements
  
+    def _snap_to_shannon(self, actual_cn):
+        """
+        Snaps a float/measured CN to the nearest available Shannon CN integer.
+        """
+        valid_cns = sorted(_CN_ROMAN.keys())
+        return min(valid_cns, key=lambda x: abs(x - actual_cn))
+
     def _get_radius(self, element, oxi_map, cn):
         """
         Shannon ionic radius for one element, at its assigned oxidation
@@ -99,7 +106,12 @@ class checkTolerance():
         try:
             return sp.get_shannon_radius(cn_roman)
         except KeyError:
-            return sp.get_shannon_radius(cn_roman, spin="High Spin")
+            try:
+                return sp.get_shannon_radius(cn_roman, spin="High Spin")
+            except KeyError:
+                if sp.ionic_radius is not None:
+                    return sp.ionic_radius
+                raise ValueError(f"No radius data found for {sp} (CN={cn_roman}).")
 
  
     def _avg_radius(self, elements, oxi_map, cn):
@@ -118,7 +130,32 @@ class checkTolerance():
         Bartel's n_A term when the A-site is mixed)."""
         states = [oxi_map[el] for el in elements]
         return sum(states) / len(states)
- 
+
+    def _get_a_site_params(self, doc, a_elements, oxi_map):
+        """
+        Helper to resolve A-site coordination from the neighbor data and 
+        compute the radius and oxidation state.
+        """
+        entry = self.ion_index.get(doc.get("material_id"), {})
+        cn_data = entry.get("cn", {})
+
+        # Extract measured CNs for A-site elements
+        a_cns = [
+            data["CN"] for site_idx, data in cn_data.items() 
+            if data.get("element") in a_elements
+        ]
+        
+        # Determine target CN
+        if a_cns:
+            avg_cn = self._snap_to_shannon(sum(a_cns) / len(a_cns))
+        else:
+            avg_cn = 12 # Default fallback
+
+        r_A = self._avg_radius(a_elements, oxi_map, avg_cn)
+        n_A = self._avg_oxi_state(a_elements, oxi_map)
+        
+        return r_A, n_A
+
     def get_tolerance_factors(self, doc):
         """
         Computes octahedral factor (mu), Goldschmidt tolerance factor (t),
@@ -134,6 +171,7 @@ class checkTolerance():
         oxi_map = self._get_oxi_map(doc)
         a_elements, b_elements, x_elements = self._get_ion_assignments(doc)
         if a_elements is None:
+            print("Tolerance None")
             self.logger.error(f"{doc.get('material_id')} is not perovskite, returning None")
             return {
             "material_id": doc.get("material_id"),
@@ -145,19 +183,19 @@ class checkTolerance():
         }
 
         try:
-            r_A = self._avg_radius(a_elements, oxi_map, 12)
+            # Modularized calculation steps
+            r_A, n_A = self._get_a_site_params(doc, a_elements, oxi_map)
             r_B = self._avg_radius(b_elements, oxi_map, 6)
             r_X = self._avg_radius(x_elements, oxi_map, 6)
-            n_A = self._avg_oxi_state(a_elements, oxi_map)
     
+            # Compute Factors
             mu = r_B / r_X
             t = (r_A + r_X) / (math.sqrt(2) * (r_B + r_X))
             ratio = r_A / r_B
-            # NOTE: ratio -> 1 (r_A == r_B) blows this up (division by ln(1)=0).
-            # Not expected for real perovskites (A is always much bigger than
-            # B), but worth a guard if this ever runs on weird/edge compositions.
             tau = r_X / r_B - n_A * (n_A - ratio / math.log(ratio))
+
         except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
+            print(f"Tolerance error: {e}")
             self.logger.error(f"Tolerance factor computation failed ({doc.get('material_id')}): {e!r}")
             return {
                 "material_id": doc.get("material_id"),

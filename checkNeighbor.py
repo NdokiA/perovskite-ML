@@ -171,13 +171,15 @@ class checkNeighbor():
         return {ci: self._get_site_cn(structure, ci, anion_indices, cnn)
                 for ci in cation_indices}
     
-    def _check_cn(self, poly_map, cn_target=6, tol=0):
+    def _check_cn(self, structure, poly_map, cn_target=6, tol=0):
         """
         CN pass/fail check (default tol=0, strict for BX6)
         """
-        return {ci: {"CN": len(anions), 
-                     "CN_ok": abs(len(anions) - cn_target)<=tol
-                     }
+        return {ci: {
+                    "element": self._site_label(structure, ci),
+                    "CN": len(anions), 
+                    "CN_ok": abs(len(anions) - cn_target)<=tol
+                    }
                      for ci, anions in poly_map.items()
                      }
     
@@ -339,7 +341,7 @@ class checkNeighbor():
         b_idx = self._get_element_indices(structure, b_elements)
         cnn = CrystalNN()
         poly_map = self._build_polyhedra_map(structure, b_idx, x_idx, cnn)
-        cn_results = self._check_cn(poly_map, cn_target, cn_tol)
+        cn_results = self._check_cn(structure, poly_map, cn_target, cn_tol)
         conn_results = self._check_pairwise_connectivity(structure, poly_map)
 
         perov, b_sites, corner_frac = self.is_perovskite(cn_results, conn_results, require_corner)
