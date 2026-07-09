@@ -168,8 +168,8 @@ class queryPerovskite(qS):
             self._log("No candidate MPIDs provided. Aborting pipeline")
             return
         
-        batches = self._timed(f"Batching queried structures", self.batch_ID(mpids))
-        self._log(f"Querying in {len(batches)} batch(es) of up to {self.MAX_IDS_PER_QUERY} MPIDs")
+        batches = self._timed(f"Batching queried structures", self.batch_ID, mpids)
+        self._log(f"Querying in {len(batches)} batch(es) of up to {self.BATCH_QUERY} MPIDs")
 
         docs = []
         self._log(f"Starting verification pipeline for {len(mpids)} MPIDs")
