@@ -23,6 +23,9 @@ class checkTolerance():
         self.JSON_PATH = JSON_PATH
         self.OUTPUT_PATH = OUTPUT_JSON
         self.logger  = logger if logger is not None else logging.getLogger(__name__)
+
+        self.oxi_index = self._load_oxi_index() if self.OXI_PATH else {}
+        self.ion_index = self._load_ion_assignments() if self.NEIGH_PATH else {}
     
     def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
@@ -58,7 +61,7 @@ class checkTolerance():
         """Oxidation-state dict for this material (element -> charge)."""
         return self.oxi_index.get(doc.get("material_id"))
  
-    def _load_ion_assigments(self):
+    def _load_ion_assignments(self):
         """
         Loads checkNeighbor.py's verify_bx6 results, indexed by material_id.
         Keeps the whole dict per material -- need is_perovskite, x_elements,
@@ -166,8 +169,6 @@ class checkTolerance():
         the real structure
  
         """
-        self.oxi_index = self._load_oxi_index()
-        self.ion_index = self._load_ion_assigments()
         oxi_map = self._get_oxi_map(doc)
         a_elements, b_elements, x_elements = self._get_ion_assignments(doc)
         if a_elements is None:

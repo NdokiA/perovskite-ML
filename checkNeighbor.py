@@ -32,6 +32,7 @@ class checkNeighbor():
         self.CIF_DIR = CIF_DIR
         self.OUTPUT_PATH = OUTPUT_JSON
         self.logger = logger if logger is not None else logging.getLogger(__name__)
+        self.oxi_index = self._load_oxi_index() if self.OXI_PATH else {}
 
     def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
@@ -324,12 +325,10 @@ class checkNeighbor():
         (cn, connectivity, corner_share_fraction, hetero_corner_fraction)
         for inspection.
         """       
-        self.oxi_index = self._load_oxi_index() if self.OXI_PATH else {}
 
         oxi_map = self._get_oxi_map(doc)
         structure = self._extract_cif(doc, oxi_map)
 
-        oxi_map = self._get_oxi_map(doc)
         # candidate elements: prefer oxi_map, else possible_species
         if x_elements is None or b_elements is None:
             if oxi_map:
