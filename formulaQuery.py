@@ -12,8 +12,6 @@ def load_json(path):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
     
-
-
 class queryPerovskite_Formula(qP):
     def __init__(self, formula = None, LOG_PATH="QUERY/LOG_QUERY/queryFormula.log",
                  BATCH_QUERY = 9999):
