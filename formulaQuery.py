@@ -47,8 +47,8 @@ class queryPerovskite_Formula(qP):
                 formula  = list(self.formula),
                 energy_above_hull = (0,0.4),
                 fields = ["material_id"],
-                chunk_size = 1000, #set to 100 for prod, 1 for test
-                num_chunks = None, #set to None for prod, 1 for test
+                chunk_size = 10, #set to 100 for prod, 1 for test
+                num_chunks = 1, #set to None for prod, 1 for test
 
             )
 
