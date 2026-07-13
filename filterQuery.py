@@ -109,6 +109,36 @@ class filterQuery():
             self._log(f"ERROR in {name} after {elapsed:.3f} s: {e}")
             return None
     
+    def filter_Ehull(self):
+        removed_docs = []
+        self._log(f"Starting E_hull check")
+        struct_start = time.perf_counter()
+
+        for i, (mpid, doc) in enumerate(list(self.docs.items())):
+            eHull = doc["energy_above_hull"] 
+            if eHull > 0.4:
+                self._log(f"{mpid} is NOT thermodynamicaly stable (Ehull = {eHull} eV/Atom)! Dumping data...")
+                os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
+                          os.path.join(self.dump_dirs, mpid+".cif"))
+                removed_doc = self.docs.pop(mpid, None)
+                removed_docs.append(removed_doc)
+
+        self._log("Saving JSON Files...")
+        self.save_json(removed_docs, self.json_dump)
+        self.save_json(list(self.docs.values()), self.json_path, update=False)
+
+        total_elapsed = time.perf_counter() - struct_start
+        remaining = len(self.docs)
+        removed = len(removed_docs)
+        total = remaining + removed
+
+        self._log(f"Finished Energy Above Hull check for all {total} MPIDs")
+        self._log(
+            f"Neighbor filter: kept {remaining}/{total} "
+            f"({remaining/total:.1%}), removed {removed}"
+        )
+        self._log(f"Total execution time: {total_elapsed:.3f} s")
+
     def filter_oxidation(self):
         
         self.cO = checkOxidation(TEST_JSON_PATH=self.json_path,
@@ -146,7 +176,10 @@ class filterQuery():
         total = remaining + removed
 
         self._log(f"Finished oxidation-state calculation for all {total} MPIDs")
-        self._log(f"Filtered structures: {remaining}/{total} kept ({removed} removed)")
+        self._log(
+            f"Neighbor filter: kept {remaining}/{total} "
+            f"({remaining/total:.1%}), removed {removed}"
+        )
         self._log(f"Total execution time: {total_elapsed:.3f} s")
     
     def filter_neighbor(self):
@@ -243,6 +276,7 @@ class filterQuery():
 
 if __name__ == "__main__":
     fQ = filterQuery()
+    fQ.filter_Ehull()
     fQ.filter_oxidation()
     fQ.filter_neighbor()
     fQ.filter_tolerance()
