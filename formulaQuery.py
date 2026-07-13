@@ -12,8 +12,6 @@ def load_json(path):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
     
-
-
 class queryPerovskite_Formula(qP):
     def __init__(self, formula = None, LOG_PATH="QUERY/LOG_QUERY/queryFormula.log",
                  BATCH_QUERY = 9999):
@@ -49,8 +47,8 @@ class queryPerovskite_Formula(qP):
                 formula  = list(self.formula),
                 energy_above_hull = (0,0.4),
                 fields = ["material_id"],
-                chunk_size = 1000, #set to 100 for prod, 1 for test
-                num_chunks = None, #set to None for prod, 1 for test
+                chunk_size = 10, #set to 100 for prod, 1 for test
+                num_chunks = 1, #set to None for prod, 1 for test
 
             )
 

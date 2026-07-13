@@ -31,15 +31,10 @@ FIELDS  = [
 
 class queryPerovskite(qS):
     def __init__(self, fields=FIELDS, CIF_DIRS="QUERY/CIF", JSON_PATH="QUERY/QUERY.json",
-                 OXI_PATH="QUERY/OXIDATION_QUERY.json", NEIGH_PATH="QUERY/NEIGHBOR_QUERY.json",
-                 TOL_PATH="QUERY/TOLERANCE_QUERY.json", LOG_PATH="QUERY/LOG_QUERY/queryRobo.log",
-                 BATCH_QUERY = 9999):
+                 LOG_PATH="QUERY/LOG_QUERY/queryRobo.log", BATCH_QUERY = 9999):
         """
         Query and structurally verify candidate perovskite structures from Materials Project.
-
-        Candidates are first identified via a robocrystallographer keyword search unioned
-        with a provenance tags/remarks search (see `obtain_ID`), then each candidate is
-        verified via oxidation-state, CrystalNN connectivity, and tolerance-factor checks
+        Candidates are identified via a robocrystallographer keyword search (see `obtain_ID`)
 
         Parameters
         ----------
@@ -49,12 +44,6 @@ class queryPerovskite(qS):
             Directory path for CIF files of the queried structure.
         JSON_PATH : str, optional
             File path for the general query JSON output.
-        OXI_PATH : str, optional
-            File path for the oxidation-state check JSON output.
-        NEIGH_PATH : str, optional
-            File path for the CrystalNN neighbor/connectivity JSON output.
-        TOL_PATH : str, optional
-            File path for the tolerance-factor JSON output.
         LOG_PATH : str, optional
             File path for the run log (parent directory is created automatically if
             it doesn't exist).
@@ -62,27 +51,18 @@ class queryPerovskite(qS):
 
         CIF_DIRS = Path(CIF_DIRS)
         JSON_PATH = Path(JSON_PATH)
-        OXI_PATH = Path(OXI_PATH)
-        NEIGH_PATH = Path(NEIGH_PATH)
-        TOL_PATH = Path(TOL_PATH)
         LOG_PATH = Path(LOG_PATH)
 
-        for path in [JSON_PATH, OXI_PATH, NEIGH_PATH, TOL_PATH, LOG_PATH]:
+        for path in [JSON_PATH, LOG_PATH]:
             path.parent.mkdir(parents=True, exist_ok=True)
         os.makedirs(CIF_DIRS, exist_ok=True)
         
         self.log_path = LOG_PATH
         self._setup_logger()
+        self.BATCH_QUERY = BATCH_QUERY
 
         super().__init__(fields, CIF_DIRS, JSON_PATH, logger=self.logger)
-        self.cN = cN(JSON_PATH, OXI_PATH, CIF_DIRS, NEIGH_PATH, logger = self.logger)
-        self.cO = cO(TEST_JSON_PATH=JSON_PATH,
-                     OUTPUT_JSON_PATH=OXI_PATH, logger = self.logger)
-        self.cT = cT(JSON_PATH, OXI_PATH, NEIGH_PATH, TOL_PATH, logger = self.logger)
-
-        self.NEIGH_PATH = NEIGH_PATH
-
-        self.BATCH_QUERY = BATCH_QUERY
+        
     def _setup_logger(self):
         """
         Configure a logger that writes timestamped action logs to `self.log_path` and
@@ -141,8 +121,8 @@ class queryPerovskite(qS):
         with MPRester(mpAPI) as mpr:
             robocrys_docs = mpr.materials.robocrys.search(
                 keywords=["perovskite"],
-                chunk_size = 1000,
-                num_chunks = None, # set None for production, 1 for testing
+                chunk_size = 10,
+                num_chunks = 1, # set None for production, 1 for testing
             )
             candidate_mpids = {d.material_id.string for d in robocrys_docs}
         
@@ -192,55 +172,8 @@ class queryPerovskite(qS):
         self._timed("Processing queried structures", self.processing_query, docs)
         self._log(f"Finished Querying. Total downloaded files: {len(docs)} of requested {len(mpids)}")
 
-        for doc in docs:
-            mpid = doc["material_id"]
-            struct_start = time.perf_counter()
-
-            self._log(f"Starting verification pipeline for {mpid}")
-
-            results_cO = self._timed(
-                f"Oxidation-state check ({mpid})",
-                self.cO.check_charge,
-                doc,
-            )
-            if results_cO is not None:
-                self.cO.save_json(results_cO)
-
-            results_cN = self._timed(
-                f"CrystalNN BX6 verification ({mpid})",
-                self.cN.verify_bx6,
-                doc,
-            )
-            if results_cN is not None:
-                self.cN.save_json(results_cN)
-
-            results_cT = self._timed(
-                f"Tolerance factor computation ({mpid})",
-                self.cT.get_tolerance_factors,
-                doc,
-            )
-            if results_cT is not None:
-                self.cT.save_json(results_cT)
-
-            self._log(
-                f"Completed verification pipeline for {mpid} "
-                f"in {time.perf_counter() - struct_start:.3f} s"
-            )
-
         total_elapsed = time.perf_counter() - total_start
-        self._log(f"Finished verification pipeline for all {len(mpids)} MPIDs")
-        self._log(f"Total Discovered Perovskite: {self.count_perovskite()}")
         self._log(f"Total execution time: {total_elapsed:.3f} s")
-
-    def count_perovskite(self):
-        """
-        Report the number of succesfully acquired perovskite
-        """
-        with open(self.NEIGH_PATH, 'r') as f:
-            data = json.load(f)
-
-        count = sum(1 for item in data if item.get("is_perovskite") is True)
-        return count
 
     def _timed(self, name, func, *args, **kwargs):
         """
