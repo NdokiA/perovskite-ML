@@ -1,11 +1,13 @@
-import json, os, logging, shutil
+import json, os, logging, time
 from checkTolerance import checkTolerance
 from checkNeighbor import checkNeighbor
+from checkOxidation import checkOxidation
 
 class filterQuery():
     def __init__(self, CIF_DIRS="QUERY/CIF", JSON_PATH="QUERY/QUERY.json",
                  OXI_PATH="QUERY/OXIDATION_QUERY.json", NEIGH_PATH="QUERY/NEIGHBOR_QUERY.json",
-                 TOL_PATH="QUERY/TOLERANCE_QUERY.json", LOG_PATH="QUERY_FILTERED/LOG_QUERY/queryFilter.log"):
+                 TOL_PATH="QUERY/TOLERANCE_QUERY.json", LOG_PATH="QUERY/LOG_QUERY/queryFilter.log",
+                 DUMP_DIRS = "QUERY/DUMP", DUMP_JSON="QUERY/DUMP.json"):
         
         self.cif_dirs = CIF_DIRS
         self.json_path = JSON_PATH
@@ -13,28 +15,27 @@ class filterQuery():
         self.neigh_path = NEIGH_PATH
         self.tol_path = TOL_PATH
         self.log_path = LOG_PATH
-
-        self.make_output_paths()
-        self.load_query()
+        self.dump_dirs = DUMP_DIRS
+        self.json_dump = DUMP_JSON
+        
+        os.makedirs(self.dump_dirs, exist_ok=True)
+        
+        docs = self.load_json(self.json_path)
+        self.docs = {doc["material_id"]: doc for doc in docs}
+        
         self._setup_logger()
         #Disregard these calls below if you're sure that tolerance query is filled
         #I need to rebuild the neighbor query because of a bug in tolerance query assumption
         #Not to mention I have filled the data
         #Erase this part later
-
-        self.cT = self.build_tolerance_query()
-        self.cN = self.build_neighbor_query()
             
     def load_json(self, path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def save_json(self, metadata, path):
-        """
-        Save metadata to JSON
-        """
+    def save_json(self, metadata, path, update=True):
 
-        if os.path.exists(path):
+        if update and os.path.exists(path):
             with open(path, "r") as f:
                 try:
                     results = json.load(f)
@@ -44,8 +45,12 @@ class filterQuery():
                     results = []
         else:
             results = []
-        
-        results.append(metadata)
+
+        if isinstance(metadata, list):
+            results.extend(metadata)
+        else:
+            results.append(metadata)
+
         with open(path, "w") as f:
             json.dump(results, f, indent=2)
 
@@ -88,81 +93,156 @@ class filterQuery():
         """
         self.logger.info(action)
 
-    def _convert(self, path):
-        new_path = path.replace("QUERY/", "QUERY_FILTERED/", 1)
-
-        if os.path.splitext(new_path)[1]:
-            os.makedirs(os.path.dirname(new_path), exist_ok = True)
-        else:
-            os.makedirs(new_path, exist_ok = True)
+    def _timed(self, name, func, *args, **kwargs):
+        """
+        Execute a function, log its execution time, and return the result.
+        """
+        start = time.perf_counter()
+        try:
+            result = func(*args, **kwargs)
+            elapsed = time.perf_counter() - start
+            self._log(f"{name} completed in {elapsed:.3f} s")
+            return result
         
-        return new_path
+        except Exception as e:
+            elapsed = time.perf_counter() - start
+            self._log(f"ERROR in {name} after {elapsed:.3f} s: {e}")
+            return None
     
-    def make_output_paths(self):
-        setattr(self, "cif_dirs_output", self._convert(self.cif_dirs))
-        setattr(self, "json_path_output", self._convert(self.json_path))
-        setattr(self, "oxi_path_output", self._convert(self.oxi_path))
-        setattr(self, "neigh_path_output", self._convert(self.neigh_path))
-        setattr(self, "tol_path_output", self._convert(self.tol_path))
+    def filter_oxidation(self):
+        
+        self.cO = checkOxidation(TEST_JSON_PATH=self.json_path,
+                                 OUTPUT_JSON_PATH=self.oxi_path,
+                                 logger = self.logger)
+        oxidation_docs = []
+        removed_docs = []
+        self._log(f"Starting oxidation-state")
+        struct_start = time.perf_counter()
+
+        for i, (mpid, doc) in enumerate(list(self.docs.items())):
+
+            results_cO = self._timed(
+                f"Oxidation-state check ({mpid})",
+                self.cO.check_charge,
+                doc)
+
+            if results_cO["is_neutral"]:
+                oxidation_docs.append(results_cO)
+            else:
+                self._log(f"{mpid} is NOT neutral!. Dumping data...")
+                os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
+                          os.path.join(self.dump_dirs, mpid+".cif"))
+                removed_doc = self.docs.pop(mpid, None)
+                removed_docs.append(removed_doc)
+        
+        self._log("Saving JSON Files...")
+        self.save_json(removed_docs, self.json_dump)
+        self.save_json(list(self.docs.values()), self.json_path, update=False)
+        self.save_json(oxidation_docs, self.oxi_path, update=False)
+            
+        total_elapsed = time.perf_counter() - struct_start
+        remaining = len(self.docs)
+        removed = len(removed_docs)
+        total = remaining + removed
+
+        self._log(f"Finished oxidation-state calculation for all {total} MPIDs")
+        self._log(f"Filtered structures: {remaining}/{total} kept ({removed} removed)")
+        self._log(f"Total execution time: {total_elapsed:.3f} s")
     
-    def load_query(self):
-        json_queries = self.load_json(self.json_path)
-        oxi_queries = self.load_json(self.oxi_path)
-        neigh_queries = self.load_json(self.neigh_path)
-        tol_queries = self.load_json(self.tol_path)
-        
-        self.query_IDs = [query["material_id"] for query in json_queries]
+    def filter_neighbor(self):
 
-        self.json_lookup = {q["material_id"]: q for q in json_queries}
-        self.oxi_lookup = {q["material_id"]: q for q in oxi_queries}
-        self.neigh_lookup = {q["material_id"]: q for q in neigh_queries}
-        self.tol_lookup = {q["material_id"]: q for q in tol_queries}
+        self.cN = checkNeighbor(JSON_PATH=self.json_path,
+                                OXI_PATH=self.oxi_path,
+                                OUTPUT_JSON=self.neigh_path,
+                                CIF_DIR=self.cif_dirs,
+                                logger = self.logger)
+        removed_docs = []
+        neighbor_docs = []
+
+        self._log(f"Starting Neighbor Check")
+        struct_start = time.perf_counter()
+
+        for i, (mpid, doc) in enumerate(list(self.docs.items())):
+
+            results_CN = self._timed(
+                f"Neighbor (BX6) check ({mpid})",
+                self.cN.verify_bx6,
+                doc)
+
+            if results_CN["is_perovskite"]:
+                neighbor_docs.append(results_CN)
+            else:
+                self._log(f"{mpid} is NOT perovskite!. Dumping data...")
+                os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
+                          os.path.join(self.dump_dirs, mpid+".cif"))
+                removed_doc = self.docs.pop(mpid, None)
+                removed_docs.append(removed_doc)
         
-    def build_neighbor_query(self):
-        cN = checkNeighbor(self.json_path, 
-                           self.oxi_path, 
-                           self.cif_dirs,
-                           logger=self.logger)
-        return cN
+        self._log("Saving JSON Files...")
+        self.save_json(removed_docs, self.json_dump)
+        self.save_json(list(self.docs.values()), self.json_path)
+        self.save_json(neighbor_docs, self.neigh_path)
+            
+        total_elapsed = time.perf_counter() - struct_start
+        remaining = len(self.docs)
+        removed = len(removed_docs)
+        total = remaining + removed
+
+        self._log(f"Finished neighbor (BX6) check calculation for all {total} MPIDs")
+        self._log(
+            f"Neighbor filter: kept {remaining}/{total} "
+            f"({remaining/total:.1%}), removed {removed}"
+        )
+        self._log(f"Total execution time: {total_elapsed:.3f} s")
     
-    def build_tolerance_query(self):
-        cT = checkTolerance(self.json_path,
-                            self.oxi_path,
-                            self.neigh_path,
-                            logger = self.logger)
-        return cT
+    def filter_tolerance(self):
 
-    def filter_queries(self):
-        filtered_query = []
-        filtered_oxi = []
-        filtered_neigh = []
-        filtered_tol = []
-        
-        print("Start Filtering")
-        for id in self.query_IDs:
-            json_query = self.json_lookup.get(id)
-            oxi_query = self.oxi_lookup.get(id)
-            neigh_query = self.neigh_lookup.get(id)
-            tol_query = self.tol_lookup.get(id)
-        
-            if json_query["energy_above_hull"]<0.4 and neigh_query["is_perovskite"]:
-                filtered_query.append(json_query)
-                filtered_oxi.append(oxi_query)
-                shutil.copy(os.path.join(self.cif_dirs, id+".cif"), 
-                            os.path.join(self.cif_dirs_output, id+".cif"))
+        self.cT = checkTolerance(JSON_PATH=self.json_path,
+                                 OXI_PATH=self.oxi_path,
+                                 NEIGH_PATH=self.neigh_path,
+                                 OUTPUT_JSON=self.tol_path,
+                                 logger = self.logger)
+        removed_docs = []
+        tolerance_docs = []
 
-                neigh_query = self.cN.verify_bx6(json_query) #erase this once the process is completed
-                filtered_neigh.append(neigh_query)
+        self._log(f"Starting Tolerance Check")
+        struct_start = time.perf_counter()
 
-                if tol_query is None or tol_query.get("octahedral_factor") is None:
-                    tol_query = self.cT.get_tolerance_factors(json_query)
-                filtered_tol.append(tol_query)
+        for i, (mpid, doc) in enumerate(list(self.docs.items())):
+
+            results_CT = self._timed(
+                f"Tolerance Check for ({mpid})",
+                self.cT.get_tolerance_factors,
+                doc)
+
+            if results_CT["octahedral_factor"] is not None:
+                tolerance_docs.append(results_CT)
+            else:
+                self._log(f"Error occured at {mpid}. Aborting data...")
+                os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
+                          os.path.join(self.dump_dirs, mpid+".cif"))
+                removed_doc = self.docs.pop(mpid, None)
+                removed_docs.append(removed_doc)
         
-        self.save_json(filtered_query, self.json_path_output)
-        self.save_json(filtered_oxi, self.oxi_path_output)
-        self.save_json(filtered_tol, self.tol_path_output)
-        self.save_json(filtered_neigh, self.neigh_path_output)
+        self._log("Saving JSON Files...")
+        self.save_json(removed_docs, self.json_dump)
+        self.save_json(list(self.docs.values()), self.json_path)
+        self.save_json(tolerance_docs, self.tol_path)
+            
+        total_elapsed = time.perf_counter() - struct_start
+        remaining = len(self.docs)
+        removed = len(removed_docs)
+        total = remaining + removed
+
+        self._log(f"Finished tolerance check calculation for all {total} MPIDs")
+        self._log(
+            f"Tolerance filter: kept {remaining}/{total} "
+            f"({remaining/total:.1%}), removed {removed}"
+        )
+        self._log(f"Total execution time: {total_elapsed:.3f} s")
 
 if __name__ == "__main__":
     fQ = filterQuery()
-    fQ.filter_queries()
+    fQ.filter_oxidation()
+    fQ.filter_neighbor()
+    fQ.filter_tolerance()
