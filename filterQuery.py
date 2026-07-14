@@ -134,7 +134,7 @@ class filterQuery():
 
         self._log(f"Finished Energy Above Hull check for all {total} MPIDs")
         self._log(
-            f"Neighbor filter: kept {remaining}/{total} "
+            f"Ehull filter: kept {remaining}/{total} "
             f"({remaining/total:.1%}), removed {removed}"
         )
         self._log(f"Total execution time: {total_elapsed:.3f} s")
@@ -177,7 +177,7 @@ class filterQuery():
 
         self._log(f"Finished oxidation-state calculation for all {total} MPIDs")
         self._log(
-            f"Neighbor filter: kept {remaining}/{total} "
+            f"Oxidation filter: kept {remaining}/{total} "
             f"({remaining/total:.1%}), removed {removed}"
         )
         self._log(f"Total execution time: {total_elapsed:.3f} s")
@@ -191,6 +191,8 @@ class filterQuery():
                                 logger = self.logger)
         removed_docs = []
         neighbor_docs = []
+
+        oxidation_docs = {doc["material_id"]: doc for doc in self.load_json(self.oxi_path)}
 
         self._log(f"Starting Neighbor Check")
         struct_start = time.perf_counter()
@@ -208,13 +210,15 @@ class filterQuery():
                 self._log(f"{mpid} is NOT perovskite!. Dumping data...")
                 os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
                           os.path.join(self.dump_dirs, mpid+".cif"))
+                oxidation_docs.pop(mpid, None)
                 removed_doc = self.docs.pop(mpid, None)
                 removed_docs.append(removed_doc)
         
         self._log("Saving JSON Files...")
         self.save_json(removed_docs, self.json_dump)
-        self.save_json(list(self.docs.values()), self.json_path)
-        self.save_json(neighbor_docs, self.neigh_path)
+        self.save_json(list(oxidation_docs.values()), self.oxi_path, update=False)
+        self.save_json(list(self.docs.values()), self.json_path, update=False)
+        self.save_json(neighbor_docs, self.neigh_path, update=False)
             
         total_elapsed = time.perf_counter() - struct_start
         remaining = len(self.docs)
@@ -238,6 +242,9 @@ class filterQuery():
         removed_docs = []
         tolerance_docs = []
 
+        oxidation_docs = {doc["material_id"]: doc for doc in self.load_json(self.oxi_path)}
+        neigh_docs = {doc["material_id"]: doc for doc in self.load_json(self.neigh_path)}
+
         self._log(f"Starting Tolerance Check")
         struct_start = time.perf_counter()
 
@@ -254,13 +261,17 @@ class filterQuery():
                 self._log(f"Error occured at {mpid}. Aborting data...")
                 os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
                           os.path.join(self.dump_dirs, mpid+".cif"))
+                oxidation_docs.pop(mpid, None)
+                neigh_docs.pop(mpid, None)
                 removed_doc = self.docs.pop(mpid, None)
                 removed_docs.append(removed_doc)
         
         self._log("Saving JSON Files...")
         self.save_json(removed_docs, self.json_dump)
-        self.save_json(list(self.docs.values()), self.json_path)
-        self.save_json(tolerance_docs, self.tol_path)
+        self.save_json(list(oxidation_docs.values()), self.oxi_path, update=False)
+        self.save_json(list(neigh_docs.values()), self.neigh_path, update=False)
+        self.save_json(list(self.docs.values()), self.json_path, update=False)
+        self.save_json(tolerance_docs, self.tol_path, update=False)
             
         total_elapsed = time.perf_counter() - struct_start
         remaining = len(self.docs)
