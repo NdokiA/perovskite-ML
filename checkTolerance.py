@@ -85,7 +85,7 @@ class checkTolerance():
             return None, None, None
         x_elements = entry["x_elements"]
         b_elements = entry["b_true"]
-        a_elements = sorted(set(entry["b_candidates"]) - set(b_elements))
+        a_elements = entry["a_true"]
         return a_elements, b_elements, x_elements
  
     def _snap_to_shannon(self, actual_cn):
