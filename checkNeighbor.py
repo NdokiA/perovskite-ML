@@ -347,6 +347,10 @@ class checkNeighbor():
  
         # true B elements = elements actually at CN=6 sites
         b_true = sorted({self._site_label(structure, ci) for ci in b_sites})
+
+        #true A elements = b-candidates element that not at CN=6 sites
+        a_sites = [ci for ci in b_idx if ci not in b_sites]
+        a_true = sorted({self._site_label(structure, ci) for ci in a_sites})
  
         # restrict the sharing stats to edges between CONFIRMED B sites only.
         # conn_results still includes every cation candidate (A-site included,
@@ -366,7 +370,8 @@ class checkNeighbor():
             "is_perovskite": perov,
             "x_elements": x_elements,
             "b_candidates": b_elements,
-            "b_true": b_true,          # elements at real CN=6 octahedral sites
+            "b_true": b_true,
+            "a_true": a_true,
             "n_b_sites": len(b_sites),
             "cn": cn_results,
             "connectivity": conn_results,
