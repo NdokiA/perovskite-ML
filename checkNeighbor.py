@@ -5,6 +5,20 @@ from pymatgen.analysis.bond_valence import BVAnalyzer
 import os, json, logging
 
 class checkNeighbor():
+
+    # Elements with no known B-site perovskite precedent (classic alkali,
+    # alkaline-earth, lanthanide 3+). Used ONLY as a fallback when
+    # same-element topology gives no signal (single-occurrence candidate,
+    # nothing to compare against) -- topology stays the primary test for
+    # everything else (Pb/Bi/Sn/In/Tl-class elements go either role
+    # depending on compound, so they're deliberately excluded from this list).
+    STRICT_A_ONLY = {
+        "Li", "Na", "K", "Rb", "Cs", "Fr",
+        "Be", "Mg", "Ca", "Sr", "Ba", "Ra",
+        "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd",
+        "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu",
+    }
+
     def __init__(self, JSON_PATH = "TEST_QUERY.json", OXI_PATH = "OXIDATION_QUERY.json", CIF_DIR = "TEST_CIF",
                  OUTPUT_JSON = "NEIGHBOR_QUERY.json", logger = None):
         """
@@ -206,7 +220,35 @@ class checkNeighbor():
         if site.is_ordered:
             return site.specie.symbol
         return max(site.species.items(), key=lambda kv:kv[1])[0].symbol
-    
+
+    def _same_element_topology(self, structure, conn_results, ci):
+        """
+        3-state check on how site `ci` connects to OTHER sites of the
+        SAME element:
+
+          True  -> disqualify. Found a same-element edge- or face-share.
+                   Real B-framework octahedra corner-share only; a
+                   same-element edge/face contact means this site isn't
+                   sitting in true B-framework position (e.g. Pb-Pb
+                   edge-sharing in RbPbF3).
+          False -> clean. Same-element contacts exist and are all corner
+                   mode -- consistent with real (possibly distorted,
+                   off-CN) B-site.
+          None  -> untestable. No same-element contacts found at all
+                   (single-occurrence candidate, nothing to compare
+                   against -- e.g. lone Rb site in RbPbF3). Caller
+                   decides fallback (STRICT_A_ONLY list) for this case.
+        """
+        label = self._site_label(structure, ci)
+        same_elem_pairs = [
+            p for p in conn_results
+            if ci in (p["i"], p["j"]) and not p["hetero"]
+            and self._site_label(structure, p["j"] if p["i"] == ci else p["i"]) == label
+        ]
+        if not same_elem_pairs:
+            return None
+        return any(p["mode"] != "corner" for p in same_elem_pairs)
+
     def _find_edges(self, poly_map, i, j):
 
         """
@@ -271,21 +313,25 @@ class checkNeighbor():
                     })
         return pairs
 
-    def is_perovskite(self, cn_results, conn_results,
+    def is_perovskite(self, b_sites, conn_results,
                     require_corner=True, corner_frac_threshold=0.9):
         """
         True/False call: a structure counts as perovskite if at least one
-        site has CN==6 (a real BX6 octahedron) AND the octahedral network
-        connecting those confirmed B sites is corner-sharing OVERWHELMINGLY
-        (>= corner_frac_threshold of B-B contacts), not just partially.
+        confirmed B site exists AND the octahedral network connecting
+        those sites is corner-sharing OVERWHELMINGLY (>= corner_frac_threshold
+        of B-B contacts), not just partially.
+
+        b_sites: already refined by the caller -- CN_ok AND passed the
+        same-element-topology / STRICT_A_ONLY filter. This function no
+        longer derives B membership itself (that was CN-only before,
+        which let CN-adjacent A-site cations like Rb in RbPbF3 slip in).
         """
-        b_sites = [ci for ci, r in cn_results.items() if r["CN_ok"]]
         if not b_sites:
-            return False, b_sites, 0.0
+            return False, 0.0
 
         b_conn = [p for p in conn_results if p["i"] in b_sites and p["j"] in b_sites]
         if not b_conn:
-            return False, b_sites, 0.0
+            return False, 0.0
 
         corner_frac = sum(p["mode"] == "corner" for p in b_conn) / len(b_conn)
 
@@ -294,7 +340,7 @@ class checkNeighbor():
         else:
             has_net = True
 
-        return has_net, b_sites, corner_frac
+        return has_net, corner_frac
 
     
     def verify_bx6(self, doc, x_elements = None, b_elements = None, cn_target=6, cn_tol=1,
@@ -343,12 +389,33 @@ class checkNeighbor():
         cn_results = self._check_cn(structure, poly_map, cn_target, cn_tol)
         conn_results = self._check_pairwise_connectivity(structure, poly_map)
 
-        perov, b_sites, corner_frac = self.is_perovskite(cn_results, conn_results, require_corner)
- 
-        # true B elements = elements actually at CN=6 sites
+        # candidates: CN close enough to 6 per cn_tol window
+        candidate_b_sites = [ci for ci, r in cn_results.items() if r["CN_ok"]]
+
+        # refine: cn_tol alone lets CN-adjacent A-site cations slip in
+        # (e.g. Rb measured CN=5 in RbPbF3, inside tol=1 of target 6).
+        # Drop anything whose same-element contacts aren't corner-only
+        # (real B-framework never edge/face-shares with itself -- catches
+        # Pb-Pb edge-sharing). For elements with no same-element data to
+        # test at all (single occurrence), fall back to STRICT_A_ONLY --
+        # catches Rb, whose own same-element contacts happen to be
+        # corner-only too and would otherwise pass topology clean.
+        b_sites = []
+        for ci in candidate_b_sites:
+            label = self._site_label(structure, ci)
+            topo = self._same_element_topology(structure, conn_results, ci)
+            if topo is True:
+                continue  # same-element edge/face contact -> not real B
+            if topo is None and label in self.STRICT_A_ONLY:
+                continue  # untestable + known A-only element -> force A
+            b_sites.append(ci)
+
+        perov, corner_frac = self.is_perovskite(b_sites, conn_results, require_corner)
+
+        # true B elements = elements actually at real, refined B sites
         b_true = sorted({self._site_label(structure, ci) for ci in b_sites})
 
-        #true A elements = b-candidates element that not at CN=6 sites
+        # true A elements = b-candidate sites that didn't make the cut above
         a_sites = [ci for ci in b_idx if ci not in b_sites]
         a_true = sorted({self._site_label(structure, ci) for ci in a_sites})
  
