@@ -7,7 +7,8 @@ _CN_ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI",
  
 class checkTolerance():
     def __init__(self, JSON_PATH = "TEST_QUERY.json", OXI_PATH="OXIDATION_QUERY.json", NEIGH_PATH="NEIGHBOR_QUERY.json",
-                OUTPUT_JSON = "TOLERANCE_QUERY.json", logger = None):
+                OUTPUT_JSON = "TOLERANCE_QUERY.json", logger = None,
+                OXI_INDEX = None, ION_INDEX = None):
         """
         Computes perovskite tolerance factors (octahedral factor mu,
         Goldschmidt t, Bartel tau) from checkOxidation.py and
@@ -24,8 +25,8 @@ class checkTolerance():
         self.OUTPUT_PATH = OUTPUT_JSON
         self.logger  = logger if logger is not None else logging.getLogger(__name__)
 
-        self.oxi_index = self._load_oxi_index() if self.OXI_PATH else {}
-        self.ion_index = self._load_ion_assignments() if self.NEIGH_PATH else {}
+        self.oxi_index = OXI_INDEX if OXI_INDEX is not None else self._load_oxi_index()
+        self.ion_index = ION_INDEX if ION_INDEX is not None else self._load_ion_assignments()
     
     def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:

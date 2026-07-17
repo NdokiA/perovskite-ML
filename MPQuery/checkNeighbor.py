@@ -5,8 +5,9 @@ from pymatgen.analysis.bond_valence import BVAnalyzer
 import os, json, logging
 
 class checkNeighbor():
-    def __init__(self, JSON_PATH = "TEST_QUERY.json", OXI_PATH = "OXIDATION_QUERY.json", CIF_DIR = "TEST_CIF",
-                 OUTPUT_JSON = "NEIGHBOR_QUERY.json", logger = None):
+    def __init__(self, JSON_PATH = "TEST_QUERY.json", CIF_DIR = "TEST_CIF",
+                 OUTPUT_JSON = "NEIGHBOR_QUERY.json", OXI_PATH = "OXIDATION_QUERY.json", logger = None,
+                 OXI_INDEX = None):
         """
         Given a crystal structure (.cif), checks whether its cation sites
         form BX6 octahedra (6 anion neighbors) and whether those octahedra
@@ -32,7 +33,7 @@ class checkNeighbor():
         self.CIF_DIR = CIF_DIR
         self.OUTPUT_PATH = OUTPUT_JSON
         self.logger = logger if logger is not None else logging.getLogger(__name__)
-        self.oxi_index = self._load_oxi_index() if self.OXI_PATH else {}
+        self.oxi_index = OXI_INDEX if OXI_INDEX is not None else self._load_oxi_index()
 
     def load_json(self):
         with open(self.JSON_PATH, "r", encoding="utf-8") as f:
