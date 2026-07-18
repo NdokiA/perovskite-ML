@@ -122,18 +122,14 @@ class filterQuery():
     def _separate_doc(self, mpid, state, results_CO = None, results_CN = None, results_CT = None):
         match state:
             case "ehull":
-                os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
-                    os.path.join(self.cif_dump_dirs, mpid+".cif"))
-                
+                                
                 #remove mpid doc
                 removed_doc = self.docs.pop(mpid, None)
                 removed_doc["excluded_reason"] = {"stage": state,
                                                   "reason": "Energy Above Hull Above 0.4 eV/atom"}
                 self.removed_docs[mpid] = removed_doc
             case "oxidation":
-                os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
-                          os.path.join(self.cif_dump_dirs, mpid+".cif"))
-                
+
                 #remove mpid doc
                 removed_doc = self.docs.pop(mpid, None)
                 removed_doc["excluded_reason"] = {"stage": state,
@@ -142,9 +138,7 @@ class filterQuery():
                 self.removed_oxi[mpid] = results_CO
 
             case "neighbor":
-                os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
-                          os.path.join(self.cif_dump_dirs, mpid+".cif"))
-                
+
                 #remove mpid doc
                 removed_doc = self.docs.pop(mpid, None)
                 removed_doc["excluded_reason"] = {"stage": state,
@@ -157,9 +151,7 @@ class filterQuery():
                 self.removed_oxi[mpid] = removed_oxi      
 
             case "tolerance":
-                os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
-                os.path.join(self.cif_dump_dirs, mpid+".cif"))
-                
+
                 #remove mpid doc
                 removed_doc = self.docs.pop(mpid, None)
                 removed_doc["excluded_reason"] = {"stage": state,
@@ -174,9 +166,6 @@ class filterQuery():
                 #remove neigh doc 
                 removed_neigh = self.neigh.pop(mpid, None)
                 self.removed_neigh[mpid] = removed_neigh 
-
-
-
 
     def filter_Ehull(self):
         removed = 0
@@ -241,7 +230,7 @@ class filterQuery():
         removed = 0
         self._log(f"Starting neighbor-state")
 
-        oxidation_index = list(self.oxi.values())
+        oxidation_index = {d["material_id"]: d.get("ion_assignment", {}) for d in list(self.oxi.values())}
         self.cN = checkNeighbor(JSON_PATH=self.query_path,
                                 OXI_PATH=self.oxi_path,
                                 OUTPUT_JSON=self.neigh_path,
@@ -331,7 +320,14 @@ class filterQuery():
         self.save_json(list(self.removed_oxi.values()), self.oxi_dump_path, update=False)
         self.save_json(list(self.removed_neigh.values()), self.neigh_dump_path, update=False)
         self.save_json(list(self.removed_tol.values()), self.tol_dump_path, update=False)
+
+        self._log("Moving .cif Files...")
+        for mpid in list(self.removed_docs.keys()):
+            os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
+                os.path.join(self.cif_dump_dirs, mpid+".cif"))
+                
         self._log("Results Saved")
+                
 
 if __name__ == "__main__":
     fQ = filterQuery()
