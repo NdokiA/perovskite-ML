@@ -21,11 +21,6 @@ class queryPerovskite_Formula(qP):
         super().__init__(LOG_PATH=LOG_PATH, BATCH_QUERY=BATCH_QUERY, CIF_DIRS=CIF_DIRS, JSON_PATH=JSON_PATH)
         files = load_json(self.json_path) if os.path.exists(self.json_path) else None
         self.formula = formula 
-        self.queried = set([])
-        if self.formula is None: #prioritize if no formula is providedn
-            self.formula = set([file["formula_anonymous"] for file in files])
-            self.queried = set([file["material_id"] for file in files])
-        
 
     def obtain_ID(self):
         """
@@ -49,7 +44,7 @@ class queryPerovskite_Formula(qP):
 
             )
 
-            candidate_mpids = {d.material_id.string for d in formula_docs} - self.queried
+            candidate_mpids = {d.material_id.string for d in formula_docs}
         
         self._log(f"Formula search returned {len(candidate_mpids)} candidate MPIDs")
  
