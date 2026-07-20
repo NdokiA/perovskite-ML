@@ -7,6 +7,7 @@ class filterQuery():
     def __init__(self, QUERY_DIRS = "QUERY", LOG_DIRS="QUERY/LOG_QUERY/", DUMP_DIRS = "QUERY/DUMP"):
         
         self.cif_dirs = os.path.join(QUERY_DIRS, "CIF")
+        self.oxi_cif_dirs = os.path.join(QUERY_DIRS, "OXI_CIF")
         self.query_path = os.path.join(QUERY_DIRS, "QUERY.json")
         self.oxi_path = os.path.join(QUERY_DIRS, "OXIDATION_QUERY.json")
         self.neigh_path = os.path.join(QUERY_DIRS, "NEIGHBOR_QUERY.json")
@@ -196,6 +197,7 @@ class filterQuery():
         self._log(f"Starting oxidation-state")
         self.cO = checkOxidation(TEST_JSON_PATH=self.query_path,
                                  OUTPUT_JSON_PATH=self.oxi_path,
+                                 CIF_DIR=self.cif_dirs, OXI_CIF_DIR= self.oxi_cif_dirs,
                                  logger = self.logger)
         
         struct_start = time.perf_counter()
@@ -321,10 +323,10 @@ class filterQuery():
         self.save_json(list(self.removed_neigh.values()), self.neigh_dump_path, update=False)
         self.save_json(list(self.removed_tol.values()), self.tol_dump_path, update=False)
 
-        self._log("Moving .cif Files...")
-        for mpid in list(self.removed_docs.keys()):
-            os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
-                os.path.join(self.cif_dump_dirs, mpid+".cif"))
+       # self._log("Moving .cif Files...")
+       # for mpid in list(self.removed_docs.keys()):
+            #os.rename(os.path.join(self.cif_dirs, mpid+".cif"), 
+               # os.path.join(self.cif_dump_dirs, mpid+".cif"))
                 
         self._log("Results Saved")
                 
